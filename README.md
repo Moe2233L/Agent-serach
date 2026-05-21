@@ -157,7 +157,7 @@ Agent/
 │   ├── vite.config.ts            # Vite 配置（含开发代理）
 │   └── src/
 │       ├── main.ts               # Vue 应用入口
-│       ├── style.css             # 全局样式 / CSS 变量 / 暗色主题
+│       ├── style.css             # 全局样式 / CSS 变量 / 主题
 │       ├── App.vue               # 主布局（左右双栏）+ SSE 事件消费
 │       ├── types/
 │       │   └── research.ts       # TypeScript 类型定义
