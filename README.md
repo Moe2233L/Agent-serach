@@ -23,10 +23,10 @@
 | Markdown 渲染 | marked |
 | 后端框架 | FastAPI + Uvicorn (ASGI) |
 | AI 框架 | LangChain + LangChain-OpenAI |
-| 大语言模型 | OpenAI GPT-4o-mini（兼容任意 OpenAI API 格式的模型） |
+| 大语言模型 | OpenAI（兼容任意 OpenAI API 格式的模型） |
 | 搜索引擎 | DDGS（多引擎元搜索，支持代理） |
 | 实时通信 | Server-Sent Events (SSE) |
-| 样式方案 | CSS 自定义属性 + Glassmorphism 暗色主题 |
+| 样式方案 | CSS 自定义属性 + Glassmorphism 主题 |
 
 ## 架构概览
 
