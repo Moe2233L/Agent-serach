@@ -63,6 +63,7 @@
               <svg v-else-if="s.status === 'searching' || s.status === 'summarizing'" class="chip-spin" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2"><circle cx="12" cy="12" r="10" stroke-dasharray="31.4 31.4" stroke-linecap="round"/></svg>
               <svg v-else width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10" opacity="0.25"/></svg>
               <span class="subtask-chip-label">{{ s.title }}</span>
+              <span v-if="s.iteration && s.iteration > 1" class="subtask-iteration">({{ s.iteration }})</span>
             </div>
           </div>
 
@@ -660,6 +661,13 @@ function downloadReport() {
 
 .subtask-chip.completed .subtask-chip-label {
   color: var(--text-muted);
+}
+
+.subtask-iteration {
+  font-size: 9px;
+  color: var(--accent-blue);
+  font-weight: 600;
+  flex-shrink: 0;
 }
 
 .chip-spin {

@@ -4,6 +4,7 @@ export interface SubtaskState {
   query: string
   status: string
   summary?: string
+  iteration?: number
 }
 
 export interface LogState {

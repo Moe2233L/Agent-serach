@@ -41,6 +41,16 @@
             </div>
           </div>
 
+          <div class="params-row">
+            <label class="deep-toggle">
+              <input type="checkbox" v-model="deepMode" :disabled="loading" />
+              <span class="deep-toggle-track">
+                <span class="deep-toggle-thumb"></span>
+              </span>
+              <span class="deep-toggle-label">深度研究 <span class="deep-toggle-badge">迭代搜索</span></span>
+            </label>
+          </div>
+
           <div class="examples">
             <span class="examples-label">试试：</span>
             <button v-for="ex in examples" :key="ex" class="example-chip" :disabled="loading" @click="topic = ex">{{ ex }}</button>
@@ -120,7 +130,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, watch, onMounted, nextTick } from 'vue'
+import { ref, reactive, computed, onMounted, nextTick } from 'vue'
 import ParticleNetwork from './components/ParticleNetwork.vue'
 import ResearchCard from './components/ResearchCard.vue'
 import type { ResearchCardData, SubtaskState, LogState } from './types/research'
@@ -131,6 +141,7 @@ const topic = ref('')
 const loading = ref(false)
 const maxResults = ref(5)
 const subtaskCount = ref(3)
+const deepMode = ref(false)
 const cards = ref<ResearchCardData[]>([])
 const history = ref<ResearchCardData[]>([])
 const historyPreview = ref<ResearchCardData | null>(null)
@@ -193,6 +204,10 @@ function closeHistoryPreview() {
 function clearHistory() {
   history.value = []
   localStorage.removeItem(STORAGE_KEY)
+  historyPreview.value = null
+  if (cards.value.length === 0) {
+    layoutShifted.value = false
+  }
 }
 
 function removeCard(index: number) {
@@ -299,6 +314,7 @@ async function startStream(card: ResearchCardData) {
         topic: card.topic,
         max_results: maxResults.value,
         subtask_count: subtaskCount.value,
+        deep_mode: deepMode.value,
       }),
       signal: controller.signal,
     })
@@ -340,7 +356,7 @@ function handleCardEvent(card: ResearchCardData, event: string, data: any) {
       break
 
     case 'subtask_status':
-      updateSubtaskState(card, data.id, { status: data.status })
+      updateSubtaskState(card, data.id, { status: data.status, iteration: data.iteration })
       if (card.status === 'planning') card.status = 'searching'
       break
 
@@ -496,6 +512,58 @@ function updateSubtaskState(card: ResearchCardData, id: number, updates: Partial
 .param-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: var(--accent-blue); border: 2px solid rgba(255,255,255,0.15); cursor: pointer; transition: transform var(--transition-fast); }
 .param-slider::-webkit-slider-thumb:hover { transform: scale(1.15); }
 .param-slider:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.deep-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+  padding: 4px 0;
+}
+.deep-toggle input { display: none; }
+.deep-toggle-track {
+  position: relative;
+  width: 36px;
+  height: 20px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 10px;
+  transition: background 250ms ease;
+  flex-shrink: 0;
+}
+.deep-toggle-track .deep-toggle-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  transition: all 250ms ease;
+}
+.deep-toggle input:checked + .deep-toggle-track {
+  background: rgba(59,130,246,0.3);
+}
+.deep-toggle input:checked + .deep-toggle-track .deep-toggle-thumb {
+  left: 18px;
+  background: var(--accent-blue);
+  box-shadow: 0 0 8px rgba(59,130,246,0.4);
+}
+.deep-toggle-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.deep-toggle-badge {
+  font-size: 9px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: rgba(59,130,246,0.1);
+  color: var(--accent-blue);
+  font-family: 'Roboto Mono', monospace;
+}
 
 .examples { display: flex; align-items: center; gap: 6px; width: 100%; }
 .examples-label { font-size: 12px; color: var(--text-muted); flex-shrink: 0; }
