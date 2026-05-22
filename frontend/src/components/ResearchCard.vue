@@ -82,7 +82,7 @@
         </template>
 
         <Transition name="fade">
-          <div v-if="report" class="report-area">
+          <div v-if="report" class="report-area" @click.stop>
             <div class="report-bar">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f97316" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
               <span>研究报告</span>
@@ -133,10 +133,10 @@ const bodyObserver = ref<MutationObserver | null>(null)
 onMounted(() => {
   if (bodyRef.value) {
     bodyObserver.value = new MutationObserver(() => {
-      if (!collapsed.value) {
-        bodyRef.value!.style.maxHeight = bodyRef.value!.scrollHeight + 'px'
-      }
-    })
+        if (!collapsed.value) {
+          bodyRef.value!.style.maxHeight = bodyRef.value!.scrollHeight + 4 + 'px'
+        }
+      })
     bodyObserver.value.observe(bodyRef.value, {
       childList: true,
       subtree: true,
@@ -159,10 +159,10 @@ function toggleCollapse() {
   if (collapsed.value) {
     collapsed.value = false
     const h = el.scrollHeight
-    el.style.maxHeight = h + 'px'
+    el.style.maxHeight = h + 4 + 'px'
   } else {
     const h = el.scrollHeight
-    el.style.maxHeight = h + 'px'
+    el.style.maxHeight = h + 4 + 'px'
     requestAnimationFrame(() => {
       el.style.maxHeight = '0px'
     })
@@ -173,7 +173,7 @@ function toggleCollapse() {
 watch(() => props.report, async () => {
   if (bodyRef.value && !collapsed.value) {
     await nextTick()
-    bodyRef.value.style.maxHeight = bodyRef.value.scrollHeight + 'px'
+    bodyRef.value.style.maxHeight = bodyRef.value.scrollHeight + 4 + 'px'
   }
 })
 
@@ -441,6 +441,7 @@ function downloadReport() {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  padding-bottom: 2px;
 }
 
 .step-bar {

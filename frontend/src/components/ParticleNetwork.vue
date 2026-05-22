@@ -117,7 +117,7 @@ function draw(ctx: CanvasRenderingContext2D) {
       const dist = dx * dx + dy * dy
 
       if (dist < CONNECTION_DIST * CONNECTION_DIST) {
-        const alpha = (1 - Math.sqrt(dist) / CONNECTION_DIST) * 0.80
+        const alpha = (1 - Math.sqrt(dist) / CONNECTION_DIST) * 0.55
         ctx.strokeStyle = `rgba(148, 163, 184, ${alpha})`
         ctx.lineWidth = 0.5
         ctx.beginPath()
