@@ -110,8 +110,8 @@
 # 安装 Python 依赖
 pip install -r requirements.txt
 
-# 复制环境变量模板
-cp .env.example .env
+# 复制环境变量模板（Windows 用 copy）
+copy .env.example .env
 ```
 
 编辑 `.env` 文件，填入你的 API Key：
@@ -124,6 +124,8 @@ LLM_TEMPERATURE=0.3
 SEARCH_MAX_RESULTS=5
 LLM_TIMEOUT=60
 ```
+
+> ⚠️ **安全提示**：`.env` 文件包含敏感 API 密钥，已默认加入 `.gitignore`。请勿手动将其加入版本控制，防止密钥泄露。如不慎提交，请立即轮换密钥。
 
 ### 2. 启动后端
 
@@ -174,35 +176,33 @@ npm run dev
 Agent/
 ├── backend/
 │   └── src/
-│       ├── __init__.py
-│       ├── main.py               # FastAPI 应用入口 + SSE /health + /research/stream 端点
+│       ├── main.py               # FastAPI 应用入口 + SSE 端点
 │       ├── agent.py              # ResearchAgent 核心编排器（规划/执行/报告三阶段）
 │       ├── config.py             # 环境配置加载（.env → Settings 单例）
-│       ├── models.py             # Pydantic 数据模型（ResearchState, Subtask, SSE 事件等）
+│       ├── models.py             # Pydantic 数据模型
 │       └── services/
-│           ├── __init__.py
-│           ├── utils.py          # 公共工具函数（JSON 解析、代码块提取）
+│           ├── utils.py          # 公共工具（JSON 解析、代码块提取）
 │           ├── todo_planner.py   # LLM 驱动的子任务规划
 │           ├── search_tool.py    # DDGS 异步网络搜索
-│           ├── task_summarizer.py # LLM 驱动的搜索结果总结（含 gap evaluation + URL 价值评估）
-│           ├── report_writer.py  # LLM 驱动的完整报告生成（含追问回答）
-│           ├── research_critic.py # LLM 驱动的质量评审与自动重写（多维评分+阈值重写）
-│           ├── content_extractor.py # 精选页面全文提取（BS4 + lxml，合规限速）
+│           ├── task_summarizer.py # 搜索结果总结 + gap evaluation + URL 价值评估
+│           ├── report_writer.py  # 报告生成（含追问回答）
+│           ├── research_critic.py # 质量评审与自动重写（多维评分+阈值重写）
+│           └── content_extractor.py # 网页全文提取（BS4 + lxml，合规限速）
 ├── frontend/
 │   ├── package.json              # Node.js 依赖与脚本
 │   ├── vite.config.ts            # Vite 配置（含开发代理）
 │   └── src/
 │       ├── main.ts               # Vue 应用入口
 │       ├── style.css             # 全局样式 / CSS 变量 / 主题
-│       ├── App.vue               # 主布局（左右双栏）+ SSE 事件消费
+│       ├── App.vue               # 主布局 + SSE 事件消费
 │       ├── types/
-│       │   └── research.ts       # TypeScript 类型定义（SubtaskState, LogState, ResearchCardData）
+│       │   └── research.ts       # TypeScript 类型定义
 │       ├── utils/
 │       │   └── sse.ts            # SSE 流解析通用函数
 │       └── components/
-│           ├── ResearchCard.vue   # 研究卡片（步骤条 / 进度条 / 子任务 / 日志 / 报告 / 错误提示）
-│           ├── MarkdownViewer.vue # Markdown 渲染与样式
-│           └── ParticleNetwork.vue # Canvas 粒子背景动画
+│           ├── ResearchCard.vue   # 研究卡片（步骤/进度/子任务/日志/报告）
+│           ├── MarkdownViewer.vue # Markdown 渲染
+│           └── ParticleNetwork.vue # Canvas 粒子网络动画背景
 ├── .env.example                  # 环境变量模板
 ├── requirements.txt              # Python 依赖清单
 └── README.md
