@@ -37,6 +37,18 @@ async def health_check():
     return JSONResponse({"status": "ok"})
 
 
+def _format_sse(event_json: str) -> str:
+    parsed = json.loads(event_json)
+    return f"event: {parsed['event']}\ndata: {json.dumps(parsed['data'], ensure_ascii=False)}\n\n"
+
+
+async def _stream_events(event_generator, raw_request: Request):
+    async for event_json in event_generator:
+        if await raw_request.is_disconnected():
+            break
+        yield _format_sse(event_json)
+
+
 @app.post("/research/stream")
 async def research_stream(request: ResearchRequest, raw_request: Request):
     if not research_agent:
@@ -52,19 +64,8 @@ async def research_stream(request: ResearchRequest, raw_request: Request):
             status_code=400,
         )
 
-    async def event_generator():
-        async for event_json in research_agent.run(
-            topic=topic,
-            max_results=request.max_results,
-            subtask_count=request.subtask_count,
-        ):
-            if await raw_request.is_disconnected():
-                break
-            parsed = json.loads(event_json)
-            yield f"event: {parsed['event']}\ndata: {json.dumps(parsed['data'], ensure_ascii=False)}\n\n"
-
     return StreamingResponse(
-        event_generator(),
+        _stream_events(research_agent.run(topic=topic, max_results=request.max_results, subtask_count=request.subtask_count), raw_request),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
@@ -96,15 +97,8 @@ async def research_followup(research_id: str, request: FollowupRequest, raw_requ
             status_code=404,
         )
 
-    async def event_generator():
-        async for event_json in research_agent.followup(research_id, question):
-            if await raw_request.is_disconnected():
-                break
-            parsed = json.loads(event_json)
-            yield f"event: {parsed['event']}\ndata: {json.dumps(parsed['data'], ensure_ascii=False)}\n\n"
-
     return StreamingResponse(
-        event_generator(),
+        _stream_events(research_agent.followup(research_id, question), raw_request),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
