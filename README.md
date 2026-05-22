@@ -1,8 +1,8 @@
-# Research Agent - AI 智能研究助手🔍
+# Research Agent - AI 智能研究助手 🔍
 
 基于 **FastAPI + Vue 3 + LangChain + OpenAI** 构建的全栈 AI 研究助手。
 
-输入一个研究主题，AI 会自动完成**任务规划 → 多源搜索 → 信息总结 → 报告生成**的全流程，整个过程通过 SSE 实时推送进度，让你在浏览器中亲眼见证研究报告的诞生。
+输入一个研究主题，AI 会自动完成**任务规划 → 多源搜索 → 全文提取 → 信息总结 → 质量评审 → 报告生成**的全流程，整个过程通过 SSE 实时推送进度，让你在浏览器中亲眼见证研究报告的诞生。
 
 ## 功能特性
 
@@ -11,7 +11,8 @@
 - **多引擎搜索**：基于 DDGS 进行多关键词并发搜索，获取丰富原始资料
 - **并发执行**：子任务并行执行搜索与总结，大幅缩短等待时间
 - **网页全文提取**：LLM 自动评估搜索结果价值，精选最多 2 个优质来源提取完整文章内容（5000+ 字），取代仅几十字的搜索摘要，大幅提升报告深度
-- **实时进度反馈**：SSE 推送驱动可视化步骤条 + 渐变进度条 + 实时日志 + 子任务迭代轮次标记 + 全文提取状态，每个阶段清晰可见
+- **实时进度反馈**：SSE 推送 + 10 秒心跳保活 + 60 秒超时断开，前端可视化步骤条、渐变进度条、实时日志、子任务迭代轮次标记、全文提取状态，每个阶段清晰可见
+- **安全渲染**：DOMPurify 净化 Markdown 输出，白名单限制标签和属性，防止 XSS 攻击
 - **专业报告生成**：LLM 生成结构化研究报告（标题 / 摘要 / 正文 / 结论 / 参考文献），支持 Markdown 一键下载
 - **质量评审与自动重写**：LLM 对每个子任务总结和整份报告进行多维评分（相关性/深度/清晰度/引用质量等），评分低于阈值时自动重写优化报告质量
 - **追问机制**：研究完成后可基于已有报告进行追问，AI 结合新搜索结果针对性回答
@@ -24,7 +25,7 @@
 | :--- | :--- |
 | 前端框架 | Vue 3 (Composition API, `<script setup>`) + TypeScript |
 | 构建工具 | Vite |
-| Markdown 渲染 | marked |
+| Markdown 渲染 | marked + DOMPurify（XSS 防护） |
 | 后端框架 | FastAPI + Uvicorn (ASGI) |
 | AI 框架 | LangChain（LangChain-Core + LangChain-OpenAI） |
 | 质量评审 | LangChain（ResearchCritic 多维评分 + 自动重写） |
@@ -277,10 +278,11 @@ Agent/
 | `report` | 报告完成 | `{ report: "markdown string" }` 研究报告 |
 | `report_chunk` | 报告流式生成 | `{ chunk: "string" }` 报告片段 |
 | `completed` | 全部完成 | `{ research_id: string }` 研究结束 |
-| `error` | 任意阶段 | `{ error: string }` 错误信息 |
+| `error` | 任意阶段 | `{ error: string }` 错误信息（含异常类型名） |
 | `followup_start` | 追问开始 | `{ question: string }` 追问发起通知 |
 | `report_append_prefix` | 追问追加 | `{ prefix: string }` 追加到报告的 Markdown 前缀 |
 | `followup_completed` | 追问完成 | `{ answer: string }` 追问回答完成 |
+| `heartbeat` | 空闲期间 | 每 10 秒保活信号，前端 60 秒超时断开 |
 
 ## 配置参考
 
