@@ -31,13 +31,6 @@ class TaskSummarizer:
         ])
         self.chain = self.prompt | self.llm | StrOutputParser()
 
-    def summarize(self, title: str, query: str, search_results: str) -> str:
-        return self.chain.invoke({
-            "title": title,
-            "query": query,
-            "search_results": search_results,
-        })
-
     async def asummarize(self, title: str, query: str, search_results: str) -> str:
         return await self.chain.ainvoke({
             "title": title,

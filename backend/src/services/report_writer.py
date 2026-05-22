@@ -63,12 +63,6 @@ class ReportWriter:
         ])
         self.followup_chain = self.followup_prompt | self.llm | StrOutputParser()
 
-    def write(self, topic: str, summaries: str, search_results: str = "") -> str:
-        return self.chain.invoke({"topic": topic, "summaries": summaries, "search_results": search_results})
-
-    async def awrite(self, topic: str, summaries: str, search_results: str = "") -> str:
-        return await self.chain.ainvoke({"topic": topic, "summaries": summaries, "search_results": search_results})
-
     async def awrite_stream(self, topic: str, summaries: str, search_results: str = ""):
         async for chunk in self.chain.astream({"topic": topic, "summaries": summaries, "search_results": search_results}):
             yield chunk

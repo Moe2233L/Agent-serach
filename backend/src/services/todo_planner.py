@@ -10,6 +10,18 @@ from langchain_openai import ChatOpenAI
 from backend.src.models import Subtask
 
 
+def _parse_json(text: str) -> dict:
+    decoder = json.JSONDecoder()
+    for i, c in enumerate(text):
+        if c in ('{', '['):
+            try:
+                obj, _ = decoder.raw_decode(text[i:])
+                return obj
+            except json.JSONDecodeError:
+                continue
+    raise json.JSONDecodeError("No valid JSON found in response", text, 0)
+
+
 class TODOPlanner:
     def __init__(self, llm: ChatOpenAI):
         self.llm = llm
@@ -29,22 +41,6 @@ class TODOPlanner:
         ])
         self.chain = self.prompt | self.llm | StrOutputParser()
 
-    def plan(self, topic: str, count: int = 3) -> list[Subtask]:
-        response = self.chain.invoke({"topic": topic, "count": count})
-        raw = response.strip()
-
-        json_str = raw
-        if "```" in raw:
-            match = re.search(r"```(?:json)?\s*([\s\S]*?)```", raw)
-            if match:
-                json_str = match.group(1).strip()
-
-        data = json.loads(json_str)
-        return [
-            Subtask(id=i, title=item["title"], query=item["query"])
-            for i, item in enumerate(data["subtasks"], 1)
-        ]
-
     async def aplan(self, topic: str, count: int = 3) -> list[Subtask]:
         response = await self.chain.ainvoke({"topic": topic, "count": count})
         raw = response.strip()
@@ -55,7 +51,7 @@ class TODOPlanner:
             if match:
                 json_str = match.group(1).strip()
 
-        data = json.loads(json_str)
+        data = _parse_json(json_str)
         return [
             Subtask(id=i, title=item["title"], query=item["query"])
             for i, item in enumerate(data["subtasks"], 1)
