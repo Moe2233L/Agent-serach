@@ -91,10 +91,29 @@
             <div class="report-bar">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f97316" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
               <span>研究报告</span>
-              <button class="download-btn" @click.stop="downloadReport">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                下载
-              </button>
+              <div class="download-group" ref="downloadGroupRef">
+                <button class="download-btn" @click.stop="toggleDownloadMenu">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  下载
+                  <svg class="download-chevron" :class="{ rotated: downloadMenuOpen }" width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>
+                </button>
+                <Transition name="dropdown-fade">
+                  <div v-if="downloadMenuOpen" class="download-menu" @click.stop>
+                    <button class="download-menu-item" @click.stop="downloadReport('md')">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                      Markdown
+                    </button>
+                    <button class="download-menu-item" @click.stop="downloadReport('html')">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+                      HTML
+                    </button>
+                    <button class="download-menu-item" @click.stop="downloadReport('pdf')">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                      PDF
+                    </button>
+                  </div>
+                </Transition>
+              </div>
             </div>
             <MarkdownViewer :content="report" />
             <div v-if="!isHistory && reportCriticFeedback" class="critic-section">
@@ -142,6 +161,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import MarkdownViewer from './MarkdownViewer.vue'
+import { downloadMarkdown, downloadHtml, downloadPdf } from '../utils/export'
 import type { SubtaskState, LogState, CriticFeedback } from '../types/research'
 
 const props = defineProps<{
@@ -165,7 +185,9 @@ const emit = defineEmits<{
 
 const logRef = ref<HTMLElement | null>(null)
 const bodyRef = ref<HTMLElement | null>(null)
+const downloadGroupRef = ref<HTMLElement | null>(null)
 const collapsed = ref(false)
+const downloadMenuOpen = ref(false)
 
 watch(() => props.isHistory, (val) => {
   if (val) collapsed.value = true
@@ -186,10 +208,12 @@ onMounted(() => {
       characterData: true,
     })
   }
+  document.addEventListener('click', handleClickOutside)
 })
 
 onBeforeUnmount(() => {
   bodyObserver.value?.disconnect()
+  document.removeEventListener('click', handleClickOutside)
 })
 
 function toggleCollapse() {
@@ -284,17 +308,30 @@ watch(() => props.logs?.length, async () => {
   }
 })
 
-function downloadReport() {
+function toggleDownloadMenu() {
+  downloadMenuOpen.value = !downloadMenuOpen.value
+}
+
+function downloadReport(format: 'md' | 'html' | 'pdf') {
   if (!props.report) return
-  const blob = new Blob([props.report], { type: 'text/markdown;charset=utf-8' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `${props.topic}_研究报告.md`
-  document.body.appendChild(a)
-  a.click()
-  document.body.removeChild(a)
-  URL.revokeObjectURL(url)
+  downloadMenuOpen.value = false
+  switch (format) {
+    case 'md':
+      downloadMarkdown(props.topic, props.report)
+      break
+    case 'html':
+      downloadHtml(props.topic, props.report)
+      break
+    case 'pdf':
+      downloadPdf(props.topic, props.report)
+      break
+  }
+}
+
+function handleClickOutside(e: MouseEvent) {
+  if (downloadGroupRef.value && !downloadGroupRef.value.contains(e.target as Node)) {
+    downloadMenuOpen.value = false
+  }
 }
 
 const criticOpen = ref(false)
@@ -829,6 +866,69 @@ function dimLabel(key: string): string {
   background: rgba(255,255,255,0.08);
   color: var(--text-primary);
   border-color: rgba(255,255,255,0.15);
+}
+
+.download-group {
+  position: relative;
+  margin-left: auto;
+}
+
+.download-chevron {
+  transition: transform 300ms ease;
+  flex-shrink: 0;
+}
+
+.download-chevron.rotated {
+  transform: rotate(180deg);
+}
+
+.download-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  min-width: 130px;
+  background: rgba(20, 20, 35, 0.95);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  z-index: 100;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+.download-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-family: 'Exo', sans-serif;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.download-menu-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-primary);
+}
+
+.download-menu-item + .download-menu-item {
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.dropdown-fade-enter-active,
+.dropdown-fade-leave-active {
+  transition: opacity 200ms ease, transform 200ms ease;
+}
+
+.dropdown-fade-enter-from,
+.dropdown-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
 }
 
 .fade-enter-active, .fade-leave-active {
