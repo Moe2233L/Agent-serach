@@ -30,8 +30,9 @@ let canvasHeight = 0
 
 const PARTICLE_COUNT = 110
 const CONNECTION_DIST = 140
-const MOUSE_RADIUS = 160
+const MOUSE_RADIUS = 80
 const DRIFT_SPEED = 0.65
+const MOUSE_FORCE = 0.08
 
 function initParticles(w: number, h: number): Particle[] {
   return Array.from({ length: PARTICLE_COUNT }, () => ({
@@ -74,11 +75,11 @@ function draw(ctx: CanvasRenderingContext2D) {
     const inMouseZone = dist < MOUSE_RADIUS && mouseActive
 
     if (inMouseZone) {
-      const force = (1 - dist / MOUSE_RADIUS) * 0.05
-      p.vx += (dx / dist || 0) * force * -1
-      p.vy += (dy / dist || 0) * force * -1
-      p.vx *= 0.92
-      p.vy *= 0.92
+      const force = (1 - dist / MOUSE_RADIUS) * MOUSE_FORCE
+      p.vx += Math.sign(dx) * force
+      p.vy += Math.sign(dy) * force
+      p.vx *= 0.98
+      p.vy *= 0.98
     } else {
       p.vx += (p.baseVx - p.vx) * 0.01
       p.vy += (p.baseVy - p.vy) * 0.01
@@ -116,7 +117,7 @@ function draw(ctx: CanvasRenderingContext2D) {
       const dist = dx * dx + dy * dy
 
       if (dist < CONNECTION_DIST * CONNECTION_DIST) {
-        const alpha = (1 - Math.sqrt(dist) / CONNECTION_DIST) * 0.35
+        const alpha = (1 - Math.sqrt(dist) / CONNECTION_DIST) * 0.80
         ctx.strokeStyle = `rgba(148, 163, 184, ${alpha})`
         ctx.lineWidth = 0.5
         ctx.beginPath()
