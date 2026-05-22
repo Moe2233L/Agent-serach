@@ -1,23 +1,10 @@
 from __future__ import annotations
 
-import json
-import re
-
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 
-
-def _parse_json(text: str) -> dict:
-    decoder = json.JSONDecoder()
-    for i, c in enumerate(text):
-        if c in ('{', '['):
-            try:
-                obj, _ = decoder.raw_decode(text[i:])
-                return obj
-            except json.JSONDecodeError:
-                continue
-    return {}
+from backend.src.services.utils import extract_json_block, parse_json
 
 
 _REPORT_DIMENSIONS = ["structure", "depth", "citation_accuracy", "readability", "completeness"]
@@ -181,12 +168,23 @@ class ResearchCritic:
                 "- 维持 Markdown 格式\n"
                 "- 保持 1500-3000 字的篇幅\n"
                 "**引用规则（违反即不合格）：**\n"
-                '✅ 正文用 `[1]` 放在事实陈述句末即可\n'
-                '✅ 例："据估计全球碳市场价值已超过 9000 亿美元[1]"\n'
-                '✅ 多个来源并列用逗号分隔，如"...[1][2]" 或 "...[1,2]"\n'
-                '❌ 禁止："根据文献[1]指出"、"文献显示"、"研究表明"、"有文献提到"\n'
+                '✅ 引用编号 `[N]` 只出现在事实陈述句的**末尾**\n'
+                '✅ 正确：全球碳市场价值已超过 9000 亿美元[1]\n'
+                '✅ 正确：预计到 2030 年将达到 3 万亿美元[2]\n'
+                '✅ 多个来源并列：...预计增长 15%[1][2]\n\n'
+                '❌ 禁止在正文中出现以下任何引导词（包括但不限于）：\n'
+                '  "根据[1]"、"根据文献[1]"、"根据相关文献"、"文献[1]指出"\n'
+                '  "研究表明"、"研究指出"、"研究发现"、"有研究显示"\n'
+                '  "据分析"、"据报道"、"据资料显示"、"据消息"\n'
+                '  "XX文章指出"、"XX报告提到"、"XX机构表示"\n'
+                '  "有文献提到"、"有资料显示"、"业内人士指出"\n\n'
+                '✅ 正确的句子结构：陈述事实 → 句末加 `[N]`\n'
+                '  例："GPT-4 在 MMLU 基准测试中得分 86.4%[1]"\n'
+                '  而不是："根据[1]研究，GPT-4 在 MMLU 中得分 86.4%"\n\n'
                 '❌ 禁止正文中出现任何超链接 `[文字](URL)`\n'
-                '❌ 禁止出现"[来源1]"、"[1]指出"等引用在前的方式\n\n'
+                '❌ 禁止出现数字编码开头的句子，如"[1]指出……"\n\n'
+                '**输出前自我检查：** 扫描全文，删除所有上述禁止的引导词，\n'
+                '  确保每个 `[N]` 都位于事实陈述句的句末而非句首或句中\n\n'
                 "- 不要改变原文的引用编号方式（保持 [1] [2] 等编号不变）\n"
                 "- 如果评审指出结构问题（如缺少摘要、结论），必须补充完整\n"
                 "- 如果评审指出引用问题（如格式不规范、编号不匹配），必须修正\n"
@@ -205,24 +203,16 @@ class ResearchCritic:
             "query": query,
             "summary": summary,
         })
-        raw = response.strip()
-        if "```" in raw:
-            match = re.search(r"```(?:json)?\s*([\s\S]*?)```", raw)
-            if match:
-                raw = match.group(1).strip()
-        return _ensure_dimensions(_parse_json(raw), _SUBTASK_DIMENSIONS)
+        raw = extract_json_block(response)
+        return _ensure_dimensions(parse_json(raw), _SUBTASK_DIMENSIONS)
 
     async def acritic_report(self, topic: str, report: str) -> dict:
         response = await self.report_critic_chain.ainvoke({
             "topic": topic,
             "report": report,
         })
-        raw = response.strip()
-        if "```" in raw:
-            match = re.search(r"```(?:json)?\s*([\s\S]*?)```", raw)
-            if match:
-                raw = match.group(1).strip()
-        return _ensure_dimensions(_parse_json(raw), _REPORT_DIMENSIONS)
+        raw = extract_json_block(response)
+        return _ensure_dimensions(parse_json(raw), _REPORT_DIMENSIONS)
 
     async def arewrite_report_stream(self, topic: str, report: str, critic_feedback: str):
         async for chunk in self.rewrite_chain.astream({

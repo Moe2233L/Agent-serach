@@ -1,25 +1,11 @@
 from __future__ import annotations
 
-import json
-import re
-
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 
 from backend.src.models import Subtask
-
-
-def _parse_json(text: str) -> dict:
-    decoder = json.JSONDecoder()
-    for i, c in enumerate(text):
-        if c in ('{', '['):
-            try:
-                obj, _ = decoder.raw_decode(text[i:])
-                return obj
-            except json.JSONDecodeError:
-                continue
-    raise json.JSONDecodeError("No valid JSON found in response", text, 0)
+from backend.src.services.utils import extract_json_block, parse_json
 
 
 class TODOPlanner:
@@ -45,15 +31,8 @@ class TODOPlanner:
 
     async def aplan(self, topic: str, count: int = 3) -> list[Subtask]:
         response = await self.chain.ainvoke({"topic": topic, "count": count})
-        raw = response.strip()
-
-        json_str = raw
-        if "```" in raw:
-            match = re.search(r"```(?:json)?\s*([\s\S]*?)```", raw)
-            if match:
-                json_str = match.group(1).strip()
-
-        data = _parse_json(json_str)
+        raw = extract_json_block(response)
+        data = parse_json(raw)
         return [
             Subtask(id=i, title=item["title"], query=item["query"])
             for i, item in enumerate(data["subtasks"], 1)

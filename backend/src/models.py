@@ -64,12 +64,3 @@ class ResearchRequest(BaseModel):
 
 class FollowupRequest(BaseModel):
     question: str
-
-
-class SubtaskPlan(BaseModel):
-    title: str = Field(description="子任务标题")
-    query: str = Field(description="用于搜索的关键词")
-
-
-class ResearchPlan(BaseModel):
-    subtasks: list[SubtaskPlan] = Field(description="研究子任务列表")

@@ -15,8 +15,6 @@ _REQUEST_DELAY = 1.0
 _last_fetch_time = 0.0
 _fetch_lock = asyncio.Lock()
 
-_BLOCKED_DOMAINS: set[str] = set()
-
 _RE_EMAIL = re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}")
 _RE_MENU = re.compile(
     r"^(navigation|menu|navbar|sidebar|footer|header|breadcrumb)$", re.I
@@ -74,7 +72,7 @@ async def fetch_page_content(url: str) -> str | None:
         return None
 
     domain = _get_domain(url)
-    if domain in _BLOCKED_DOMAINS or domain in _RESTRICTIVE_DOMAINS:
+    if domain in _RESTRICTIVE_DOMAINS:
         return None
 
     if _is_likely_binary(url):

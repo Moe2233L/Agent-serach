@@ -1,23 +1,10 @@
 from __future__ import annotations
 
-import json
-import re
-
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 
-
-def _parse_json(text: str) -> dict:
-    decoder = json.JSONDecoder()
-    for i, c in enumerate(text):
-        if c in ('{', '['):
-            try:
-                obj, _ = decoder.raw_decode(text[i:])
-                return obj
-            except json.JSONDecodeError:
-                continue
-    raise json.JSONDecodeError("No valid JSON found in response", text, 0)
+from backend.src.services.utils import extract_json_block, parse_json
 
 
 class TaskSummarizer:
@@ -122,23 +109,15 @@ class TaskSummarizer:
             "summary": summary,
             "iteration": iteration,
         })
-        raw = response.strip()
-        if "```" in raw:
-            match = re.search(r"```(?:json)?\s*([\s\S]*?)```", raw)
-            if match:
-                raw = match.group(1).strip()
-        return _parse_json(raw)
+        raw = extract_json_block(response)
+        return parse_json(raw)
 
     async def aevaluate_urls(self, title: str, search_results: str) -> list[str]:
         response = await self.url_eval_chain.ainvoke({
             "title": title,
             "search_results": search_results,
         })
-        raw = response.strip()
-        if "```" in raw:
-            match = re.search(r"```(?:json)?\s*([\s\S]*?)```", raw)
-            if match:
-                raw = match.group(1).strip()
-        data = _parse_json(raw)
+        raw = extract_json_block(response)
+        data = parse_json(raw)
         urls = data.get("urls", [])
         return [item["url"] for item in urls if "url" in item][:2]
