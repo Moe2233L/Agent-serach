@@ -35,6 +35,7 @@ class Subtask(BaseModel):
     summary: str = ""
     search_results: list[dict] = Field(default_factory=list)
     iteration: int = 1
+    full_contents: dict[str, str] = Field(default_factory=dict)
 
 
 class LogEntry(BaseModel):

@@ -72,6 +72,28 @@ class TaskSummarizer:
         ])
         self.gap_chain = self.gap_prompt | self.llm | StrOutputParser()
 
+        self.url_eval_prompt = ChatPromptTemplate.from_messages([
+            (
+                "system",
+                "你是一个研究助手，需要判断哪些搜索结果值得提取全文。\n\n"
+                "输出严格的 JSON 格式（不含 markdown 代码块标记）：\n"
+                '{{"urls": [{{"url": "https://...", "reason": "选择理由"}}]}}\n\n'
+                "选择规则：\n"
+                "1. 最多选择 2 个 URL\n"
+                "2. 优先选择内容深度高、标题与子任务高度相关的结果\n"
+                "3. 优先选择权威来源（如论文、官方文档、新闻等）\n"
+                "4. 如果搜索结果摘要已足够充分，可以不选（返回空数组）\n"
+                "5. 避免选择论坛、评论区、简短问答类页面\n\n"
+                "正确示例：\n"
+                '{{"urls": [{{"url": "https://example.com/deep-article", "reason": "标题高度相关，且摘要透露出深度分析内容"}}]}}',
+            ),
+            (
+                "human",
+                "子任务：{title}\n\n搜索结果：\n{search_results}\n\n请判断哪些 URL 值得提取全文内容。",
+            ),
+        ])
+        self.url_eval_chain = self.url_eval_prompt | self.llm | StrOutputParser()
+
     async def asummarize(self, title: str, query: str, search_results: str) -> str:
         return await self.chain.ainvoke({
             "title": title,
@@ -92,3 +114,17 @@ class TaskSummarizer:
             if match:
                 raw = match.group(1).strip()
         return _parse_json(raw)
+
+    async def aevaluate_urls(self, title: str, search_results: str) -> list[str]:
+        response = await self.url_eval_chain.ainvoke({
+            "title": title,
+            "search_results": search_results,
+        })
+        raw = response.strip()
+        if "```" in raw:
+            match = re.search(r"```(?:json)?\s*([\s\S]*?)```", raw)
+            if match:
+                raw = match.group(1).strip()
+        data = _parse_json(raw)
+        urls = data.get("urls", [])
+        return [item["url"] for item in urls if "url" in item][:2]

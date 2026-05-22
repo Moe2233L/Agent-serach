@@ -16,6 +16,7 @@ from backend.src.models import (
     SubtaskStatus,
 )
 from backend.src.services.search_tool import search_web
+from backend.src.services.content_extractor import fetch_page_content
 from backend.src.services.todo_planner import TODOPlanner
 from backend.src.services.task_summarizer import TaskSummarizer
 from backend.src.services.report_writer import ReportWriter
@@ -181,6 +182,35 @@ class ResearchAgent:
 
                     subtask.search_results = search_results
 
+                    if search_results:
+                        url_eval_text = _format_search_results(search_results, subtask.query)
+                        try:
+                            selected_urls = await self.task_summarizer.aevaluate_urls(
+                                subtask.title, url_eval_text,
+                            )
+                        except Exception:
+                            selected_urls = []
+
+                        if selected_urls:
+                            await queue.put(self._make_event(
+                                "log",
+                                {"phase": "executing", "message": f"子任务 {subtask.id} 正在提取 {len(selected_urls)} 个网页全文..."},
+                            ))
+                            contents = await asyncio.gather(
+                                *[fetch_page_content(url) for url in selected_urls],
+                                return_exceptions=True,
+                            )
+                            full_content_parts = []
+                            for url, content in zip(selected_urls, contents):
+                                if isinstance(content, str) and len(content) > 50:
+                                    full_content_parts.append(f"全文内容（{url}）：\n{content}")
+                            if full_content_parts:
+                                subtask.full_contents = {selected_urls[i]: c for i, c in enumerate(contents) if isinstance(c, str) and len(c) > 50}
+                                await queue.put(self._make_event(
+                                    "log",
+                                    {"phase": "executing", "message": f"子任务 {subtask.id} 提取完成，获得 {len(full_content_parts)} 篇完整文章"},
+                                ))
+
                     subtask.status = SubtaskStatus.summarizing
                     await queue.put(self._make_event(
                         "subtask_status",
@@ -188,6 +218,11 @@ class ResearchAgent:
                     ))
 
                     search_text = _format_search_results(search_results, subtask.query)
+                    if hasattr(subtask, 'full_contents') and subtask.full_contents:
+                        full_parts = []
+                        for url, content in subtask.full_contents.items():
+                            full_parts.append(f"全文内容（{url}）：\n{content}")
+                        search_text += "\n\n" + "\n\n".join(full_parts)
                     summary = await self.task_summarizer.asummarize(
                         subtask.title, subtask.query, search_text,
                     )
