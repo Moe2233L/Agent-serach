@@ -173,7 +173,6 @@ npm run dev
 ```
 Agent/
 ├── backend/
-│   ├── requirements.txt          # Python 依赖清单
 │   └── src/
 │       ├── __init__.py
 │       ├── main.py               # FastAPI 应用入口 + SSE /health + /research/stream 端点
@@ -182,6 +181,7 @@ Agent/
 │       ├── models.py             # Pydantic 数据模型（ResearchState, Subtask, SSE 事件等）
 │       └── services/
 │           ├── __init__.py
+│           ├── utils.py          # 公共工具函数（JSON 解析、代码块提取）
 │           ├── todo_planner.py   # LLM 驱动的子任务规划
 │           ├── search_tool.py    # DDGS 异步网络搜索
 │           ├── task_summarizer.py # LLM 驱动的搜索结果总结（含 gap evaluation + URL 价值评估）
@@ -204,6 +204,7 @@ Agent/
 │           ├── MarkdownViewer.vue # Markdown 渲染与样式
 │           └── ParticleNetwork.vue # Canvas 粒子背景动画
 ├── .env.example                  # 环境变量模板
+├── requirements.txt              # Python 依赖清单
 └── README.md
 ```
 
