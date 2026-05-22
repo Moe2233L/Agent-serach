@@ -4,6 +4,7 @@
 
 <script lang="ts">
 import { marked } from 'marked'
+import DOMPurify from 'dompurify'
 
 marked.setOptions({
   gfm: true,
@@ -20,9 +21,14 @@ const props = defineProps<{
 
 const rendered = computed(() => {
   if (!props.content) return ''
-  const html = marked.parse(props.content) as string
-  // 确保所有链接在新窗口打开
-  return html.replace(/<a(?![^>]*target="_blank")/g, '<a target="_blank" rel="noopener noreferrer"')
+  const rawHtml = marked.parse(props.content) as string
+  let sanitized = DOMPurify.sanitize(rawHtml, {
+    ALLOWED_TAGS: ['h1','h2','h3','h4','h5','h6','p','br','hr','ul','ol','li','a','strong','em','code','pre','blockquote','table','thead','tbody','tr','th','td','img','span','div','del','sup','sub'],
+    ALLOWED_ATTR: ['href','target','rel','class','id','src','alt','width','height'],
+    ADD_ATTR: ['target'],
+  })
+  sanitized = sanitized.replace(/<a(?![^>]*target=)/g, '<a target="_blank" rel="noopener noreferrer"')
+  return sanitized
 })
 </script>
 

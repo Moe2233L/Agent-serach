@@ -110,8 +110,8 @@
 # 安装 Python 依赖
 pip install -r requirements.txt
 
-# 复制环境变量模板（Windows 用 copy）
-copy .env.example .env
+# 复制环境变量模板
+cp .env.example .env
 ```
 
 编辑 `.env` 文件，填入你的 API Key：

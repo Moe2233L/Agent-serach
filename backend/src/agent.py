@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import re
 import uuid
 from collections import OrderedDict
@@ -353,8 +352,8 @@ class ResearchAgent:
         yield self._make_event("log", {"phase": "reporting", "message": "研究报告生成完成"})
         yield self._make_event("report", {"report": state.report})
 
-    def _make_event(self, event: str, data: dict) -> str:
-        return json.dumps({"event": event, "data": data}, ensure_ascii=False)
+    def _make_event(self, event: str, data: dict) -> tuple[str, dict]:
+        return (event, data)
 
 
 def _extract_result(r: dict) -> dict:

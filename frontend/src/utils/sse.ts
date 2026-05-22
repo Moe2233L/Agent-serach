@@ -1,3 +1,5 @@
+const SSE_TIMEOUT_MS = 60000
+
 export async function readSSEStream(
   reader: ReadableStreamDefaultReader<Uint8Array>,
   onEvent: (event: string, data: any) => void,
@@ -5,13 +7,29 @@ export async function readSSEStream(
 ): Promise<void> {
   const decoder = new TextDecoder()
   let buffer = ''
+  let lastReadTime = Date.now()
 
   while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
+    if (Date.now() - lastReadTime > SSE_TIMEOUT_MS) {
+      throw new Error('SSE 连接超时: 60 秒未收到数据')
+    }
 
+    let done: boolean
+    let value: Uint8Array | undefined
+
+    try {
+      const readResult = await reader.read()
+      done = readResult.done
+      value = readResult.value
+    } catch (err: any) {
+      if (signal?.aborted) break
+      throw err
+    }
+
+    if (done) break
     if (signal?.aborted) break
 
+    lastReadTime = Date.now()
     buffer += decoder.decode(value, { stream: true })
     const lines = buffer.split('\n')
     buffer = lines.pop() || ''

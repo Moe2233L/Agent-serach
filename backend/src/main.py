@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 
@@ -12,6 +13,8 @@ from backend.src.models import FollowupRequest, ResearchRequest
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 app = FastAPI(title="Research Agent API", version="1.0.0")
+
+_HEARTBEAT_INTERVAL = 10
 
 app.add_middleware(
     CORSMiddleware,
@@ -37,13 +40,35 @@ async def health_check():
     return JSONResponse({"status": "ok"})
 
 
-def _format_sse(event_json: str) -> str:
-    parsed = json.loads(event_json)
-    return f"event: {parsed['event']}\ndata: {json.dumps(parsed['data'], ensure_ascii=False)}\n\n"
+def _format_sse(event_tuple: tuple[str, dict]) -> str:
+    event, data = event_tuple
+    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
 async def _stream_events(event_generator, raw_request: Request):
-    async for event_json in event_generator:
+    async def heartbeat_wrapper():
+        while True:
+            try:
+                done, pending = await asyncio.wait(
+                    [asyncio.create_task(event_generator.__anext__())],
+                    timeout=_HEARTBEAT_INTERVAL,
+                )
+                if done:
+                    for task in done:
+                        try:
+                            yield task.result()
+                        except StopAsyncIteration:
+                            return
+                else:
+                    if await raw_request.is_disconnected():
+                        return
+                    yield ": heartbeat\n\n"
+            except StopAsyncIteration:
+                return
+            except Exception:
+                break
+
+    async for event_json in heartbeat_wrapper():
         if await raw_request.is_disconnected():
             break
         yield _format_sse(event_json)
