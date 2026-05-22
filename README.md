@@ -13,6 +13,7 @@
 - **网页全文提取**：LLM 自动评估搜索结果价值，精选最多 2 个优质来源提取完整文章内容（5000+ 字），取代仅几十字的搜索摘要，大幅提升报告深度
 - **实时进度反馈**：SSE 推送驱动可视化步骤条 + 渐变进度条 + 实时日志 + 子任务迭代轮次标记 + 全文提取状态，每个阶段清晰可见
 - **专业报告生成**：LLM 生成结构化研究报告（标题 / 摘要 / 正文 / 结论 / 参考文献），支持 Markdown 一键下载
+- **质量评审与自动重写**：LLM 对每个子任务总结和整份报告进行多维评分（相关性/深度/清晰度/引用质量等），评分低于阈值时自动重写优化报告质量
 - **追问机制**：研究完成后可基于已有报告进行追问，AI 结合新搜索结果针对性回答
 - **历史记录**：自动保存研究历史至 localStorage，支持回顾查看 + 追问
 - **玻璃拟态 UI**：暗色主题配以毛玻璃效果、粒子网络动画背景、渐变光晕和流畅动效
@@ -25,7 +26,8 @@
 | 构建工具 | Vite |
 | Markdown 渲染 | marked |
 | 后端框架 | FastAPI + Uvicorn (ASGI) |
-| AI 框架 | LangChain + LangChain-OpenAI |
+| AI 框架 | LangChain（LangChain-Core + LangChain-OpenAI） |
+| 质量评审 | LangChain（ResearchCritic 多维评分 + 自动重写） |
 | 大语言模型 | OpenAI（兼容任意 OpenAI API 格式的模型） |
 | 搜索引擎 | DDGS（多引擎元搜索，支持代理） |
 | 内容提取 | BeautifulSoup 4 + lxml（LLM 精选页面全文提取） |
@@ -59,10 +61,13 @@
 │  ┌──────────┐  ┌──────────────┐  ┌──────────────────────┐  │
 │  │ main.py  │→ │   agent.py   │→ │    services/          │  │
 │  │ FastAPI  │  │ ResearchAgent│  │ todo_planner          │  │
-│  │ SSE 端点  │  │ 三阶段编排+   │  │ search_tool           │  │
-│  │ followup │  │ 迭代搜索+追问 │  │ task_summarizer       │  │
-│  └──────────┘  │ + 全文提取    │  │   (含 gap evaluation  │  │
-│                └──────────────┘  │    + URL 评估)         │  │
+│  │ SSE 端点  │  │ 三阶段编排+   │  │ search_tool            │  │
+│  │ followup │  │ 迭代搜索+追问  │  │ task_summarizer       │  │
+│  └──────────┘  │ + 全文提取    │  │   (含 gap evaluation   │  │
+│                │ + 质量评审    │  │    + URL 评估)         │  │
+│                └──────────────┘  │ research_critic        │  │
+│                                  │   (子任务+报告多维评审  │  │
+│                                  │    + 低于阈值自动重写)  │  │
 │                                  │ report_writer          │  │
 │                                  │   (含追问回答)          │  │
 │                                  │ content_extractor      │  │
@@ -74,11 +79,11 @@
 ### 研究流程
 
 ```
-输入主题 ──→ [规划阶段] ──→ [执行阶段] ──→ [报告阶段] ──→ 完成
-               LLM 分解      并发搜索+总结      LLM 撰写     可追问
-               ↓               ↓ (深度模式)       ↓
-             subtasks       迭代最多3轮        report
-             事件             gap evaluation    事件
+输入主题 ──→ [规划阶段] ──→ [执行阶段] ──→ [评审阶段] ──→ [报告阶段] ──→ 完成
+               LLM 分解      并发搜索+总结     质量评分       LLM 撰写     可追问
+               ↓               ↓ (深度模式)       ↓ 低于7分       ↓
+             subtasks       迭代最多3轮       自动重写       report
+             事件             gap evaluation                  事件
                              精准搜索词重搜
                              子任务迭代轮次标记
                              ↓ 每次搜索后
@@ -86,6 +91,9 @@
                              ↓ 精选最多 2 个
                              提取网页全文 5000+ 字
                              ↓ 注入搜索结果供总结
+                             ↓ 每个子任务完成后
+                             子任务质量评审（4维度）
+                             实时推送到前端
 ```
 
 ## 快速开始
@@ -178,6 +186,7 @@ Agent/
 │           ├── search_tool.py    # DDGS 异步网络搜索
 │           ├── task_summarizer.py # LLM 驱动的搜索结果总结（含 gap evaluation + URL 价值评估）
 │           ├── report_writer.py  # LLM 驱动的完整报告生成（含追问回答）
+│           ├── research_critic.py # LLM 驱动的质量评审与自动重写（多维评分+阈值重写）
 │           ├── content_extractor.py # 精选页面全文提取（BS4 + lxml，合规限速）
 ├── frontend/
 │   ├── package.json              # Node.js 依赖与脚本
@@ -260,7 +269,10 @@ Agent/
 | `phase` | 阶段切换 | `{ phase: "planning" \| "executing" \| "reporting" }` 阶段通知 |
 | `subtasks` | 规划完成 | `{ subtasks: [{ id, title, query }] }` 子任务列表 |
 | `subtask_status` | 执行中 | `{ id, status, title, iteration? }` 子任务状态变更(含迭代轮次) |
+| `subtask_critic` | 子任务完成 | `{ id, overall_score, dimensions, strengths, weaknesses, suggestions }` 子任务质量评审结果 |
 | `subtask_completed` | 子任务完成 | `{ id, title, summary, iteration }` 子任务完成通知 |
+| `report_critic` | 报告生成后 | `{ overall_score, dimensions, strengths, weaknesses, suggestions }` 整份报告质量评审结果 |
+| `report_rewriting` | 评审后 | `{ reason: string }` 报告质量低于阈值，正在自动重写 |
 | `report` | 报告完成 | `{ report: "markdown string" }` 研究报告 |
 | `report_chunk` | 报告流式生成 | `{ chunk: "string" }` 报告片段 |
 | `completed` | 全部完成 | `{ research_id: string }` 研究结束 |

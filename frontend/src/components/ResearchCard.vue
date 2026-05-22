@@ -64,7 +64,12 @@
               <svg v-else width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10" opacity="0.25"/></svg>
               <span class="subtask-chip-label">{{ s.title }}</span>
               <span v-if="s.iteration && s.iteration > 1" class="subtask-iteration">({{ s.iteration }})</span>
+              <span v-if="s.status === 'completed' && getSubtaskScore(s.id)" class="subtask-score" :class="scoreVariant(getSubtaskScore(s.id))">{{ getSubtaskScore(s.id) }}</span>
             </div>
+          </div>
+          <div v-if="reportRewriting" class="phase-message rewriting-msg">
+            <span class="phase-spinner"></span>
+            <span>正在根据质量评审优化报告...</span>
           </div>
 
           <div v-if="currentPhase >= 2" class="phase-message">
@@ -92,6 +97,41 @@
               </button>
             </div>
             <MarkdownViewer :content="report" />
+            <div v-if="reportCriticFeedback" class="critic-section">
+              <div class="critic-header" @click="toggleCritic">
+                <div class="critic-header-left">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                  <span>质量评审</span>
+                </div>
+                <div class="critic-header-right">
+                  <span class="critic-badge" :class="reportScoreVariant">{{ reportOverallScore }}/10</span>
+                  <svg class="critic-chevron" :class="{ rotated: criticOpen }" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>
+                </div>
+              </div>
+              <div v-if="criticOpen" class="critic-body">
+                <div class="critic-dimensions">
+                  <div v-for="(val, key) in reportCriticFeedback.dimensions" :key="key" class="critic-dim-item">
+                    <span class="critic-dim-label">{{ dimLabel(key) }}</span>
+                    <div class="critic-dim-bar-track">
+                      <div class="critic-dim-bar-fill" :class="scoreVariant(val)" :style="{ width: val * 10 + '%' }"></div>
+                    </div>
+                    <span class="critic-dim-val" :class="scoreVariant(val)">{{ val }}/10</span>
+                  </div>
+                </div>
+                <div v-if="reportCriticFeedback.strengths.length" class="critic-section-item">
+                  <div class="critic-section-title positive">优势</div>
+                  <div v-for="(s, i) in reportCriticFeedback.strengths" :key="i" class="critic-item">✓ {{ s }}</div>
+                </div>
+                <div v-if="reportCriticFeedback.weaknesses.length" class="critic-section-item">
+                  <div class="critic-section-title negative">不足</div>
+                  <div v-for="(w, i) in reportCriticFeedback.weaknesses" :key="i" class="critic-item">✗ {{ w }}</div>
+                </div>
+                <div v-if="reportCriticFeedback.suggestions.length" class="critic-section-item">
+                  <div class="critic-section-title suggestion">改进建议</div>
+                  <div v-for="(s, i) in reportCriticFeedback.suggestions" :key="i" class="critic-item">→ {{ s }}</div>
+                </div>
+              </div>
+            </div>
           </div>
         </Transition>
       </div>
@@ -102,7 +142,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import MarkdownViewer from './MarkdownViewer.vue'
-import type { SubtaskState, LogState } from '../types/research'
+import type { SubtaskState, LogState, CriticFeedback } from '../types/research'
 
 const props = defineProps<{
   topic: string
@@ -112,6 +152,9 @@ const props = defineProps<{
   status?: string
   error?: string
   isHistory?: boolean
+  subtaskCriticFeedback?: Record<number, CriticFeedback>
+  reportCriticFeedback?: CriticFeedback | null
+  reportRewriting?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -252,6 +295,40 @@ function downloadReport() {
   a.click()
   document.body.removeChild(a)
   URL.revokeObjectURL(url)
+}
+
+const criticOpen = ref(false)
+
+function toggleCritic() {
+  criticOpen.value = !criticOpen.value
+}
+
+const reportOverallScore = computed(() => props.reportCriticFeedback?.overall_score ?? 0)
+
+const reportScoreVariant = computed(() => scoreVariant(reportOverallScore.value))
+
+function getSubtaskScore(id: number): number {
+  return props.subtaskCriticFeedback?.[id]?.overall_score ?? 0
+}
+
+function scoreVariant(val: number): string {
+  if (val >= 8) return 'score-high'
+  if (val >= 6) return 'score-medium'
+  return 'score-low'
+}
+
+function dimLabel(key: string): string {
+  const labels: Record<string, string> = {
+    structure: '结构',
+    depth: '深度',
+    citation_accuracy: '引用',
+    readability: '可读性',
+    completeness: '完整性',
+    relevance: '相关性',
+    clarity: '清晰度',
+    citation_quality: '引用质量',
+  }
+  return labels[key] || key
 }
 </script>
 
@@ -759,5 +836,211 @@ function downloadReport() {
 }
 .fade-enter-from, .fade-leave-to {
   opacity: 0;
+}
+
+.rewriting-msg {
+  animation: fadeInOut 1.5s ease-in-out infinite;
+}
+
+@keyframes fadeInOut {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
+.subtask-score {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.subtask-score.score-high {
+  color: #34d399;
+  background: rgba(52, 211, 153, 0.1);
+}
+
+.subtask-score.score-medium {
+  color: #fbbf24;
+  background: rgba(251, 191, 36, 0.1);
+}
+
+.subtask-score.score-low {
+  color: #f87171;
+  background: rgba(248, 113, 113, 0.1);
+}
+
+.critic-section {
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  margin-top: 12px;
+  padding-top: 8px;
+}
+
+.critic-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  user-select: none;
+}
+
+.critic-header:hover {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.critic-header-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.critic-header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.critic-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+.critic-badge.score-high {
+  color: #34d399;
+  background: rgba(52, 211, 153, 0.1);
+}
+
+.critic-badge.score-medium {
+  color: #fbbf24;
+  background: rgba(251, 191, 36, 0.1);
+}
+
+.critic-badge.score-low {
+  color: #f87171;
+  background: rgba(248, 113, 113, 0.1);
+}
+
+.critic-chevron {
+  transition: transform 300ms ease;
+  color: var(--text-muted);
+}
+
+.critic-chevron.rotated {
+  transform: rotate(180deg);
+}
+
+.critic-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 8px 4px;
+  animation: criticSlideIn 300ms ease;
+}
+
+@keyframes criticSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.critic-dimensions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.critic-dim-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.critic-dim-label {
+  font-size: 10px;
+  color: var(--text-muted);
+  width: 56px;
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.critic-dim-bar-track {
+  flex: 1;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.critic-dim-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 500ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.critic-dim-bar-fill.score-high {
+  background: #34d399;
+}
+
+.critic-dim-bar-fill.score-medium {
+  background: #fbbf24;
+}
+
+.critic-dim-bar-fill.score-low {
+  background: #f87171;
+}
+
+.critic-dim-val {
+  font-size: 9px;
+  font-weight: 600;
+  width: 28px;
+  text-align: right;
+  flex-shrink: 0;
+  font-family: 'Roboto Mono', monospace;
+}
+
+.critic-dim-val.score-high { color: #34d399; }
+.critic-dim-val.score-medium { color: #fbbf24; }
+.critic-dim-val.score-low { color: #f87171; }
+
+.critic-section-item {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.critic-section-title {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 2px;
+}
+
+.critic-section-title.positive { color: #34d399; }
+.critic-section-title.negative { color: #f87171; }
+.critic-section-title.suggestion { color: var(--accent-blue); }
+
+.critic-item {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  padding: 2px 0;
 }
 </style>

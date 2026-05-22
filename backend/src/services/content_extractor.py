@@ -13,6 +13,7 @@ _MAX_CONTENT_SIZE = 50000
 _REQUEST_TIMEOUT = 15
 _REQUEST_DELAY = 1.0
 _last_fetch_time = 0.0
+_fetch_lock = asyncio.Lock()
 
 _BLOCKED_DOMAINS: set[str] = set()
 
@@ -43,7 +44,7 @@ async def _check_robots(url: str) -> bool:
             if resp.status_code == 200:
                 for line in resp.text.splitlines():
                     line = line.strip().lower()
-                    if line.startswith("disallow:") and ("/" in line or "" in line):
+                    if line == "disallow: /":
                         _ROBOTS_CACHE[domain] = False
                         return False
         _ROBOTS_CACHE[domain] = True
@@ -82,11 +83,12 @@ async def fetch_page_content(url: str) -> str | None:
     if not await _check_robots(url):
         return None
 
-    now = time.monotonic()
-    elapsed = now - _last_fetch_time
-    if elapsed < _REQUEST_DELAY:
-        await asyncio.sleep(_REQUEST_DELAY - elapsed)
-    _last_fetch_time = time.monotonic()
+    async with _fetch_lock:
+        now = time.monotonic()
+        elapsed = now - _last_fetch_time
+        if elapsed < _REQUEST_DELAY:
+            await asyncio.sleep(_REQUEST_DELAY - elapsed)
+        _last_fetch_time = time.monotonic()
 
     try:
         async with httpx.AsyncClient(timeout=_REQUEST_TIMEOUT, follow_redirects=True) as client:

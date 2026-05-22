@@ -20,6 +20,7 @@ from backend.src.services.content_extractor import fetch_page_content
 from backend.src.services.todo_planner import TODOPlanner
 from backend.src.services.task_summarizer import TaskSummarizer
 from backend.src.services.report_writer import ReportWriter
+from backend.src.services.research_critic import ResearchCritic
 from langchain_openai import ChatOpenAI
 
 _MD_LINK_RE = re.compile(r"\[([^\]]+)\]\([^)]+\)")
@@ -38,6 +39,7 @@ class ResearchAgent:
         self.todo_planner = TODOPlanner(llm)
         self.task_summarizer = TaskSummarizer(llm)
         self.report_writer = ReportWriter(llm)
+        self.research_critic = ResearchCritic(llm)
         self.research_states: OrderedDict[str, ResearchState] = OrderedDict()
 
     def get_state(self, research_id: str) -> ResearchState | None:
@@ -95,6 +97,7 @@ class ResearchAgent:
             full_answer += chunk
             yield self._make_event("report_chunk", {"chunk": chunk})
 
+        state.report = (state.report or "") + prefix + full_answer
         yield self._make_event("log", {"phase": "executing", "message": "追问回答完成"})
         yield self._make_event("followup_completed", {"answer": full_answer})
 
@@ -228,6 +231,23 @@ class ResearchAgent:
                     )
                     subtask.summary = summary
 
+                    critic_feedback = None
+                    try:
+                        critic_result = await self.research_critic.acritic_subtask_summary(
+                            subtask.title, subtask.query, summary,
+                        )
+                        critic_feedback = {
+                            "id": subtask.id,
+                            "overall_score": critic_result.get("overall_score", 0),
+                            "dimensions": critic_result.get("dimensions", {}),
+                            "strengths": critic_result.get("strengths", []),
+                            "weaknesses": critic_result.get("weaknesses", []),
+                            "suggestions": critic_result.get("suggestions", []),
+                        }
+                        await queue.put(self._make_event("subtask_critic", critic_feedback))
+                    except Exception:
+                        pass
+
                     if not deep_mode or iteration >= MAX_ITERATIONS:
                         break
 
@@ -290,6 +310,45 @@ class ResearchAgent:
         async for chunk in self.report_writer.awrite_stream(state.topic, summaries_text, search_results_text):
             state.report += chunk
             yield self._make_event("report_chunk", {"chunk": chunk})
+
+        try:
+            critic_result = await self.research_critic.acritic_report(state.topic, state.report)
+            overall_score = critic_result.get("overall_score", 0)
+
+            yield self._make_event("report_critic", {
+                "overall_score": overall_score,
+                "dimensions": critic_result.get("dimensions", {}),
+                "strengths": critic_result.get("strengths", []),
+                "weaknesses": critic_result.get("weaknesses", []),
+                "suggestions": critic_result.get("suggestions", []),
+            })
+
+            if isinstance(overall_score, (int, float)) and overall_score < 7:
+                weaknesses = critic_result.get("weaknesses", [])
+                suggestions = critic_result.get("suggestions", [])
+                critic_text = f"总体评分: {overall_score}/10\n"
+                if weaknesses:
+                    critic_text += "\n不足:\n- " + "\n- ".join(weaknesses)
+                if suggestions:
+                    critic_text += "\n\n改进建议:\n- " + "\n- ".join(suggestions)
+
+                yield self._make_event("log", {
+                    "phase": "reporting",
+                    "message": f"报告质量评分 {overall_score}/10，正在进行改进重写...",
+                })
+                yield self._make_event("report_rewriting", {
+                    "reason": f"质量评分 {overall_score}/10，优化中",
+                })
+
+                old_report = state.report
+                state.report = ""
+                async for chunk in self.research_critic.arewrite_report_stream(
+                    state.topic, old_report, critic_text,
+                ):
+                    state.report += chunk
+                    yield self._make_event("report_chunk", {"chunk": chunk})
+        except Exception:
+            pass
 
         yield self._make_event("log", {"phase": "reporting", "message": "研究报告生成完成"})
         yield self._make_event("report", {"report": state.report})

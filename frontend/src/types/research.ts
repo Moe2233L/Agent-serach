@@ -13,6 +13,18 @@ export interface LogState {
   message: string
 }
 
+export interface CriticFeedback {
+  overall_score: number
+  dimensions: Record<string, number>
+  strengths: string[]
+  weaknesses: string[]
+  suggestions: string[]
+}
+
+export interface SubtaskCriticFeedback extends CriticFeedback {
+  id: number
+}
+
 export interface ResearchCardData {
   id: string
   topic: string
@@ -23,4 +35,7 @@ export interface ResearchCardData {
   error: string
   timestamp?: number
   controller?: AbortController | null
+  subtaskCriticFeedback?: Record<number, CriticFeedback>
+  reportCriticFeedback?: CriticFeedback | null
+  reportRewriting?: boolean
 }

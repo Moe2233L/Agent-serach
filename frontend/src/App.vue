@@ -99,6 +99,9 @@
               :status="card.status"
               :error="card.error"
               :is-history="!!historyPreview"
+              :subtask-critic-feedback="card.subtaskCriticFeedback"
+              :report-critic-feedback="card.reportCriticFeedback"
+              :report-rewriting="card.reportRewriting"
               @remove="removeCard(i)"
               @cancel="handleCancel(i)"
             />
@@ -364,12 +367,37 @@ function handleCardEvent(card: ResearchCardData, event: string, data: any) {
       updateSubtaskState(card, data.id, { status: 'completed', summary: data.summary })
       break
 
+    case 'subtask_critic':
+      if (!card.subtaskCriticFeedback) card.subtaskCriticFeedback = {}
+      card.subtaskCriticFeedback[data.id] = {
+        overall_score: data.overall_score,
+        dimensions: data.dimensions,
+        strengths: data.strengths,
+        weaknesses: data.weaknesses,
+        suggestions: data.suggestions,
+      }
+      break
+
     case 'report':
       card.report = data.report
       break
 
     case 'report_chunk':
       card.report = (card.report || '') + data.chunk
+      break
+
+    case 'report_critic':
+      card.reportCriticFeedback = {
+        overall_score: data.overall_score,
+        dimensions: data.dimensions,
+        strengths: data.strengths,
+        weaknesses: data.weaknesses,
+        suggestions: data.suggestions,
+      }
+      break
+
+    case 'report_rewriting':
+      card.reportRewriting = true
       break
 
     case 'completed':

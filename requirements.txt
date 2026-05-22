@@ -7,11 +7,7 @@ uvicorn[standard]>=0.29.0
 # ============================================
 # 智能体层 - LangChain 框架
 # ============================================
-langchain>=0.3.0
 langchain-core>=0.3.0
-langchain-community>=0.3.0
-
-# LLM 提供商（按需启用）
 langchain-openai>=0.2.0
 # langchain-anthropic>=0.2.0
 # langchain-google-genai>=2.0.0
