@@ -32,6 +32,7 @@ class ResearchAgent:
             temperature=settings.llm_temperature,
             api_key=settings.openai_api_key,
             base_url=settings.openai_base_url,
+            request_timeout=settings.llm_timeout,
         )
         self.todo_planner = TODOPlanner(llm)
         self.task_summarizer = TaskSummarizer(llm)
@@ -41,9 +42,9 @@ class ResearchAgent:
     def get_state(self, research_id: str) -> ResearchState | None:
         return self.research_states.get(research_id)
 
-    async def run(self, topic: str, max_results: int = 5, subtask_count: int = 3):
+    async def run(self, topic: str, max_results: int = 5, subtask_count: int = 3, deep_mode: bool = False):
         research_id = uuid.uuid4().hex[:12]
-        state = ResearchState(research_id=research_id, topic=topic)
+        state = ResearchState(research_id=research_id, topic=topic, deep_mode=deep_mode)
 
         try:
             async for event in self._execute(state, max_results, subtask_count):
@@ -100,7 +101,7 @@ class ResearchAgent:
         async for event in self._planning_phase(state, subtask_count):
             yield event
 
-        async for event in self._execution_phase(state, max_results):
+        async for event in self._execution_phase(state, max_results, state.deep_mode):
             yield event
 
         async for event in self._reporting_phase(state):
@@ -138,54 +139,88 @@ class ResearchAgent:
             },
         )
 
-    async def _execution_phase(self, state: ResearchState, max_results: int):
+    async def _execution_phase(self, state: ResearchState, max_results: int, deep_mode: bool = False):
         state.phase = ResearchPhase.executing
         state.status = ResearchStatus.searching
 
         yield self._make_event("phase", {"phase": "executing"})
         yield self._make_event("log", {"phase": "executing", "message": "开始执行子任务搜索与总结..."})
 
+        MAX_ITERATIONS = 3
         queue: asyncio.Queue[str | None] = asyncio.Queue()
 
         async def worker(subtask):
             try:
-                subtask.status = SubtaskStatus.searching
-                await queue.put(self._make_event(
-                    "subtask_status",
-                    {"id": subtask.id, "status": "searching", "title": subtask.title},
-                ))
+                for iteration in range(1, MAX_ITERATIONS + 1):
+                    subtask.iteration = iteration
 
-                search_results: list[dict] = []
-                for attempt in range(1, 3):
-                    try:
-                        search_results = await search_web(subtask.query)
+                    subtask.status = SubtaskStatus.searching
+                    await queue.put(self._make_event(
+                        "subtask_status",
+                        {"id": subtask.id, "status": "searching", "title": subtask.title, "iteration": iteration},
+                    ))
+
+                    if deep_mode and iteration > 1:
+                        await queue.put(self._make_event(
+                            "log",
+                            {"phase": "executing", "message": f"子任务 {subtask.id} 第{iteration}轮深度搜索: {subtask.query}"},
+                        ))
+
+                    search_results: list[dict] = []
+                    for attempt in range(1, 3):
+                        try:
+                            search_results = await search_web(subtask.query)
+                            break
+                        except Exception:
+                            if attempt < 2:
+                                await queue.put(self._make_event(
+                                    "log",
+                                    {"phase": "executing", "message": f"子任务 {subtask.id} 第{attempt}次搜索失败，正在重试..."},
+                                ))
+                                await asyncio.sleep(1)
+
+                    subtask.search_results = search_results
+
+                    subtask.status = SubtaskStatus.summarizing
+                    await queue.put(self._make_event(
+                        "subtask_status",
+                        {"id": subtask.id, "status": "summarizing", "title": subtask.title, "iteration": iteration},
+                    ))
+
+                    search_text = _format_search_results(search_results, subtask.query)
+                    summary = await self.task_summarizer.asummarize(
+                        subtask.title, subtask.query, search_text,
+                    )
+                    subtask.summary = summary
+
+                    if not deep_mode or iteration >= MAX_ITERATIONS:
                         break
-                    except Exception as e:
-                        if attempt < 2:
-                            await queue.put(self._make_event(
-                                "log",
-                                {"phase": "executing", "message": f"子任务 {subtask.id} 第{attempt}次搜索失败，正在重试..."},
-                            ))
-                            await asyncio.sleep(1)
 
-                subtask.search_results = search_results
+                    gap_result = await self.task_summarizer.aevaluate_gaps(
+                        subtask.title, subtask.query, summary, iteration,
+                    )
 
-                subtask.status = SubtaskStatus.summarizing
-                await queue.put(self._make_event(
-                    "subtask_status",
-                    {"id": subtask.id, "status": "summarizing", "title": subtask.title},
-                ))
+                    if gap_result.get("sufficient", False):
+                        await queue.put(self._make_event(
+                            "log",
+                            {"phase": "executing", "message": f"子任务 {subtask.id} 信息已充分，结束迭代"},
+                        ))
+                        break
 
-                search_text = _format_search_results(search_results, subtask.query)
-                summary = await self.task_summarizer.asummarize(
-                    subtask.title, subtask.query, search_text,
-                )
-                subtask.summary = summary
+                    next_queries = gap_result.get("next_queries", [])
+                    if not next_queries:
+                        break
+
+                    subtask.query = next_queries[0]
+                    await queue.put(self._make_event(
+                        "log",
+                        {"phase": "executing", "message": f"子任务 {subtask.id} 信息不足，进行第{iteration + 1}轮搜索: {subtask.query}"},
+                    ))
+
                 subtask.status = SubtaskStatus.completed
-
                 await queue.put(self._make_event(
                     "subtask_completed",
-                    {"id": subtask.id, "title": subtask.title, "summary": summary},
+                    {"id": subtask.id, "title": subtask.title, "summary": subtask.summary, "iteration": subtask.iteration},
                 ))
             except Exception as e:
                 subtask.status = SubtaskStatus.error

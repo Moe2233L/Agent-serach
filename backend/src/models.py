@@ -34,6 +34,7 @@ class Subtask(BaseModel):
     status: SubtaskStatus = SubtaskStatus.pending
     summary: str = ""
     search_results: list[dict] = Field(default_factory=list)
+    iteration: int = 1
 
 
 class LogEntry(BaseModel):
@@ -50,12 +51,14 @@ class ResearchState(BaseModel):
     report: str = ""
     logs: list[LogEntry] = Field(default_factory=list)
     error: str = ""
+    deep_mode: bool = False
 
 
 class ResearchRequest(BaseModel):
     topic: str
     max_results: int = Field(default=5, ge=1, le=20)
     subtask_count: int = Field(default=3, ge=1, le=8)
+    deep_mode: bool = False
 
 
 class FollowupRequest(BaseModel):

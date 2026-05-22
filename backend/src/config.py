@@ -13,6 +13,8 @@ class Settings:
     search_max_results: int = int(os.getenv("SEARCH_MAX_RESULTS", "5"))
     search_proxy: str | None = os.getenv("SEARCH_PROXY") or None
 
+    llm_timeout: int = int(os.getenv("LLM_TIMEOUT", "60"))
+
     subtask_count: int = int(os.getenv("SUBTASK_COUNT", "3"))
 
 

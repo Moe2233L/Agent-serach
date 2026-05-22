@@ -7,12 +7,14 @@
 ## 功能特性
 
 - **一键研究**：输入主题，AI 自动将主题分解为多个可独立搜索的子任务
+- **深度研究模式**：开启后对每个子任务最多迭代 3 轮搜索（gap evaluation → 精准搜索词 → 再搜索），直到信息充分
 - **多引擎搜索**：基于 DDGS 进行多关键词并发搜索，获取丰富原始资料
 - **并发执行**：子任务并行执行搜索与总结，大幅缩短等待时间
-- **实时进度反馈**：SSE 推送驱动可视化步骤条 + 渐变进度条 + 实时日志，每个阶段清晰可见
+- **实时进度反馈**：SSE 推送驱动可视化步骤条 + 渐变进度条 + 实时日志 + 子任务迭代轮次标记，每个阶段清晰可见
 - **专业报告生成**：LLM 生成结构化研究报告（标题 / 摘要 / 正文 / 结论 / 参考文献），支持 Markdown 一键下载
-- **历史记录**：自动保存研究历史至 localStorage，支持回顾查看
-- **玻璃拟态 UI**：暗色主题配以毛玻璃效果、渐变光晕和流畅动效
+- **追问机制**：研究完成后可基于已有报告进行追问，AI 结合新搜索结果针对性回答
+- **历史记录**：自动保存研究历史至 localStorage，支持回顾查看 + 追问
+- **玻璃拟态 UI**：暗色主题配以毛玻璃效果、粒子网络动画背景、渐变光晕和流畅动效
 
 ## 技术栈
 
@@ -31,38 +33,49 @@
 ## 架构概览
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                    Frontend (Vite :5173)                │
-│  ┌──────────┐  ┌──────────────┐  ┌───────────────────┐  │
-│  │ App.vue  │  │ ResearchCard │  │ MarkdownViewer    │  │
-│  │ SSE 消费  │→ │ 步骤/进度/日志 │→ │ 报告渲染/下载       │  │
-│  └──────────┘  └──────────────┘  └───────────────────┘  │
-└──────────────────────┬──────────────────────────────────┘
-                       │ POST /research/stream (SSE)
-                       │ event: log / phase / subtasks / ...
-                 ┌─────┴──────┐
-                 │ Vite Proxy │
-                 └─────┬──────┘
-┌──────────────────────┴──────────────────────────────────┐
-│                   Backend (Uvicorn :8000)               │
-│  ┌──────────┐  ┌──────────────┐  ┌───────────────────┐  │
-│  │ main.py  │→ │   agent.py   │→ │    services/      │  │
-│  │ FastAPI  │  │ ResearchAgent│  │ todo_planner      │  │
-│  │ SSE 端点 │   │ 三阶段编排    │  │ search_tool       │  │
-│  └──────────┘  └──────────────┘  │ task_summarizer   │  │
-│                                  │ report_writer     │  │
-│                                  └───────────────────┘  │
-└─────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────┐
+│                    Frontend (Vite :5173)                    │
+│  ┌──────────┐  ┌──────────────┐  ┌──────────────────────┐  │
+│  │ App.vue  │  │ ResearchCard │  │ MarkdownViewer       │  │
+│  │ SSE 消费  │→ │ 步骤/进度/日志 │→ │ 报告渲染/下载          │  │
+│  │ deep_mode│  │ 折叠/展开    │  │ ParticleNetwork      │  │
+│  └────┬─────┘  └──────────────┘  │ 粒子动画背景          │  │
+│       │                          └──────────────────────┘  │
+│  ┌────┴─────┐                                              │
+│  │ utils/   │                                              │
+│  │ sse.ts   │— SSE 流解析通用函数                            │
+│  └──────────┘                                              │
+└───────────────────────────┬────────────────────────────────┘
+                            │ POST /research/stream (SSE)
+                            │ POST /research/{id}/followup (SSE)
+                            │ event: log / phase / subtasks / ...
+                      ┌─────┴──────┐
+                      │ Vite Proxy │
+                      └─────┬──────┘
+┌───────────────────────────┴────────────────────────────────┐
+│                    Backend (Uvicorn :8000)                  │
+│  ┌──────────┐  ┌──────────────┐  ┌──────────────────────┐  │
+│  │ main.py  │→ │   agent.py   │→ │    services/          │  │
+│  │ FastAPI  │  │ ResearchAgent│  │ todo_planner          │  │
+│  │ SSE 端点  │  │ 三阶段编排+   │  │ search_tool           │  │
+│  │ followup │  │ 迭代搜索+追问 │  │ task_summarizer       │  │
+│  └──────────┘  └──────────────┘  │   (含 gap evaluation)  │  │
+│                                  │ report_writer          │  │
+│                                  │   (含追问回答)          │  │
+│                                  └────────────────────────┘  │
+└──────────────────────────────────────────────────────────────┘
 ```
 
 ### 研究流程
 
 ```
 输入主题 ──→ [规划阶段] ──→ [执行阶段] ──→ [报告阶段] ──→ 完成
-               LLM 分解      并发搜索+总结      LLM 撰写
-               ↓               ↓                  ↓
-             subtasks       subtask_status      report
-             事件            事件 + 进度          事件
+               LLM 分解      并发搜索+总结      LLM 撰写     可追问
+               ↓               ↓ (深度模式)       ↓
+             subtasks       迭代最多3轮        report
+             事件             gap evaluation    事件
+                             精准搜索词重搜
+                             子任务迭代轮次标记
 ```
 
 ## 快速开始
@@ -91,6 +104,7 @@ OPENAI_BASE_URL=https://api.openai.com/v1
 LLM_MODEL=gpt-4o-mini
 LLM_TEMPERATURE=0.3
 SEARCH_MAX_RESULTS=5
+LLM_TIMEOUT=60
 ```
 
 ### 2. 启动后端
@@ -130,9 +144,11 @@ npm run dev
 | 1 | 输入研究主题 | 支持中文、英文或混合输入 |
 | 2 | 调整搜索条数 | 滑块 2-15 条，控制每个子任务的搜索结果数量 |
 | 3 | 调整子任务数 | 滑块 1-6 个，控制主题分解的粒度 |
-| 4 | 点击"开始研究" | 右侧面板展开，显示研究卡片 |
-| 5 | 观察进度 | 步骤条 → 进度条 → 子任务芯片 → 日志，实时更新 |
-| 6 | 查看报告 | 生成完成后自动展开，支持 Markdown 下载 |
+| 4 | 开启深度研究 | 可选，开启后每个子任务最多迭代 3 轮搜索，直到信息充分 |
+| 5 | 点击"开始研究" | 右侧面板展开，显示研究卡片 |
+| 6 | 观察进度 | 步骤条 → 进度条 → 子任务芯片(含迭代轮次) → 日志，实时更新 |
+| 7 | 查看报告 | 生成完成后自动展开，支持 Markdown 下载 |
+| 8 | 历史追问 | 点击历史记录查看报告，可输入追问针对性地深入探讨 |
 
 ## 项目结构
 
@@ -193,7 +209,8 @@ Agent/
 {
   "topic": "量子计算最新进展",
   "max_results": 5,
-  "subtask_count": 3
+  "subtask_count": 3,
+  "deep_mode": false
 }
 ```
 
@@ -204,6 +221,25 @@ Agent/
 | `topic` | string | - | - | 研究主题，必填 |
 | `max_results` | integer | 5 | 1-20 | 每个子任务的搜索结果数量 |
 | `subtask_count` | integer | 3 | 1-8 | 子任务数量 |
+| `deep_mode` | boolean | false | - | 开启深度研究模式(迭代搜索) |
+
+### `POST /research/{research_id}/followup`
+
+对已完成的研究进行追问，返回 SSE 事件流。
+
+**请求体：**
+
+```json
+{
+  "question": "能详细说说这个领域的最新突破吗？"
+}
+```
+
+**参数说明：**
+
+| 参数 | 类型 | 说明 |
+| :--- | :--- | :--- |
+| `question` | string | 追问内容，必填 |
 
 ### SSE 事件流
 
@@ -212,11 +248,15 @@ Agent/
 | `log` | 全程 | `{ phase: string, message: string }` 阶段日志 |
 | `phase` | 阶段切换 | `{ phase: "planning" \| "executing" \| "reporting" }` 阶段通知 |
 | `subtasks` | 规划完成 | `{ subtasks: [{ id, title, query }] }` 子任务列表 |
-| `subtask_status` | 执行中 | `{ id, status, title }` 子任务状态变更 |
-| `subtask_completed` | 子任务完成 | `{ id, title, summary }` 子任务完成通知 |
+| `subtask_status` | 执行中 | `{ id, status, title, iteration? }` 子任务状态变更(含迭代轮次) |
+| `subtask_completed` | 子任务完成 | `{ id, title, summary, iteration }` 子任务完成通知 |
 | `report` | 报告完成 | `{ report: "markdown string" }` 研究报告 |
+| `report_chunk` | 报告流式生成 | `{ chunk: "string" }` 报告片段 |
 | `completed` | 全部完成 | `{ research_id: string }` 研究结束 |
 | `error` | 任意阶段 | `{ error: string }` 错误信息 |
+| `followup_start` | 追问开始 | `{ question: string }` 追问发起通知 |
+| `report_append_prefix` | 追问追加 | `{ prefix: string }` 追加到报告的 Markdown 前缀 |
+| `followup_completed` | 追问完成 | `{ answer: string }` 追问回答完成 |
 
 ## 配置参考
 
@@ -230,6 +270,7 @@ Agent/
 | `LLM_TEMPERATURE` | `0.3` | 生成温度，范围 0-2，越低越确定 |
 | `SEARCH_MAX_RESULTS` | `5` | 每个子任务的搜索结果上限 |
 | `SEARCH_PROXY` | (空) | 搜索引擎使用的 HTTP/HTTPS 代理 |
+| `LLM_TIMEOUT` | `60` | LLM 请求超时时间(秒)，防止网络卡住研究流程 |
 | `SUBTASK_COUNT` | `3` | 默认子任务数量 |
 
 ## 本地开发

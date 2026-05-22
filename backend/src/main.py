@@ -65,7 +65,7 @@ async def research_stream(request: ResearchRequest, raw_request: Request):
         )
 
     return StreamingResponse(
-        _stream_events(research_agent.run(topic=topic, max_results=request.max_results, subtask_count=request.subtask_count), raw_request),
+        _stream_events(research_agent.run(topic=topic, max_results=request.max_results, subtask_count=request.subtask_count, deep_mode=request.deep_mode), raw_request),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
