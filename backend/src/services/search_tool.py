@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 from backend.src.config import settings
 
 
@@ -14,7 +16,6 @@ async def search_web(query: str) -> list[dict]:
             with DDGS(proxy=settings.search_proxy) as ddgs:
                 return list(ddgs.text(query=query, max_results=max_results))
 
-        import asyncio
         results = await asyncio.get_running_loop().run_in_executor(None, _search)
 
         if not results:

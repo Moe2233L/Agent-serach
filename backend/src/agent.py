@@ -228,16 +228,18 @@ class ResearchAgent:
         return json.dumps({"event": event, "data": data}, ensure_ascii=False)
 
 
+def _extract_result(r: dict) -> dict:
+    return {"title": r.get("title", ""), "url": r.get("url", ""), "body": r.get("body", "")}
+
+
 def _format_search_results(results: list[dict], query: str) -> str:
     if not results:
         return "未搜索到相关结果。"
 
     lines = []
     for i, r in enumerate(results, 1):
-        title = r.get("title", "")
-        url = r.get("url", "")
-        body = r.get("body", "")
-        lines.append(f"[{i}] {title}\n    URL: {url}\n    {body}")
+        item = _extract_result(r)
+        lines.append(f"[{i}] {item['title']}\n    URL: {item['url']}\n    {item['body']}")
     return "\n\n".join(lines)
 
 
@@ -248,10 +250,8 @@ def _format_all_sources(subtasks: list) -> str:
             continue
         sources = []
         for r in s.search_results:
-            title = r.get("title", "")
-            url = r.get("url", "")
-            body = r.get("body", "")
-            sources.append(f"- [{title}]({url})\n  {body}")
+            item = _extract_result(r)
+            sources.append(f"- [{item['title']}]({item['url']})\n  {item['body']}")
         if sources:
             parts.append(f"## {s.title}\n" + "\n".join(sources))
     return "\n\n".join(parts)
