@@ -11,9 +11,10 @@ from bs4 import BeautifulSoup
 _USER_AGENT = "ResearchAgent/1.0 (research assistant; +https://github.com)"
 _MAX_CONTENT_SIZE = 50000
 _REQUEST_TIMEOUT = 15
-_REQUEST_DELAY = 1.0
-_last_fetch_time = 0.0
-_fetch_lock = asyncio.Lock()
+_REQUEST_DELAY = 0.8
+_domain_locks: dict[str, asyncio.Lock] = {}
+_domain_last_fetch: dict[str, float] = {}
+_domain_locks_lock = asyncio.Lock()
 
 _RE_EMAIL = re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}")
 _RE_MENU = re.compile(
@@ -66,8 +67,6 @@ def _is_likely_binary(url: str) -> bool:
     return False
 
 async def fetch_page_content(url: str) -> str | None:
-    global _last_fetch_time
-
     if not url or not url.startswith("http"):
         return None
 
@@ -81,12 +80,18 @@ async def fetch_page_content(url: str) -> str | None:
     if not await _check_robots(url):
         return None
 
-    async with _fetch_lock:
+    async with _domain_locks_lock:
+        if domain not in _domain_locks:
+            _domain_locks[domain] = asyncio.Lock()
+            _domain_last_fetch[domain] = 0.0
+        lock = _domain_locks[domain]
+
+    async with lock:
         now = time.monotonic()
-        elapsed = now - _last_fetch_time
+        elapsed = now - _domain_last_fetch[domain]
         if elapsed < _REQUEST_DELAY:
             await asyncio.sleep(_REQUEST_DELAY - elapsed)
-        _last_fetch_time = time.monotonic()
+        _domain_last_fetch[domain] = time.monotonic()
 
     try:
         async with httpx.AsyncClient(timeout=_REQUEST_TIMEOUT, follow_redirects=True) as client:

@@ -40,8 +40,10 @@ async def health_check():
     return JSONResponse({"status": "ok"})
 
 
-def _format_sse(event_tuple: tuple[str, dict]) -> str:
-    event, data = event_tuple
+def _format_sse(event_item: tuple[str, dict] | str) -> str:
+    if isinstance(event_item, str):
+        return event_item
+    event, data = event_item
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 

@@ -24,6 +24,7 @@ from langchain_openai import ChatOpenAI
 
 _MD_LINK_RE = re.compile(r"\[([^\]]+)\]\([^)]+\)")
 _MAX_STATES = 50
+_LLM_RETRIES = 2
 
 
 class ResearchAgent:
@@ -150,7 +151,7 @@ class ResearchAgent:
         yield self._make_event("log", {"phase": "executing", "message": "开始执行子任务搜索与总结..."})
 
         MAX_ITERATIONS = 3
-        queue: asyncio.Queue[str | None] = asyncio.Queue()
+        queue: asyncio.Queue[tuple[str, dict] | None] = asyncio.Queue(maxsize=200)
 
         async def worker(subtask):
             try:
@@ -187,7 +188,8 @@ class ResearchAgent:
                     if search_results:
                         url_eval_text = _format_search_results(search_results, subtask.query)
                         try:
-                            selected_urls = await self.task_summarizer.aevaluate_urls(
+                            selected_urls = await self._llm_retry(
+                                subtask.id, "URL评估", self.task_summarizer.aevaluate_urls, queue,
                                 subtask.title, url_eval_text,
                             )
                         except Exception:
@@ -225,14 +227,16 @@ class ResearchAgent:
                         for url, content in subtask.full_contents.items():
                             full_parts.append(f"全文内容（{url}）：\n{content}")
                         search_text += "\n\n" + "\n\n".join(full_parts)
-                    summary = await self.task_summarizer.asummarize(
+                    summary = await self._llm_retry(
+                        subtask.id, "总结", self.task_summarizer.asummarize, queue,
                         subtask.title, subtask.query, search_text,
                     )
                     subtask.summary = summary
 
                     critic_feedback = None
                     try:
-                        critic_result = await self.research_critic.acritic_subtask_summary(
+                        critic_result = await self._llm_retry(
+                            subtask.id, "评审", self.research_critic.acritic_subtask_summary, queue,
                             subtask.title, subtask.query, summary,
                         )
                         critic_feedback = {
@@ -250,7 +254,8 @@ class ResearchAgent:
                     if not deep_mode or iteration >= MAX_ITERATIONS:
                         break
 
-                    gap_result = await self.task_summarizer.aevaluate_gaps(
+                    gap_result = await self._llm_retry(
+                        subtask.id, "缺口评估", self.task_summarizer.aevaluate_gaps, queue,
                         subtask.title, subtask.query, summary, iteration,
                     )
 
@@ -278,7 +283,7 @@ class ResearchAgent:
                 ))
             except Exception as e:
                 subtask.status = SubtaskStatus.error
-                await queue.put(self._make_event("error", {"error": f"子任务 {subtask.id} 出错: {e}"}))
+                await queue.put(self._make_event("error", {"error": f"子任务 {subtask.id} 出错[{type(e).__name__}]: {e or '无详细信息'}"}))
             finally:
                 await queue.put(None)
 
@@ -354,6 +359,18 @@ class ResearchAgent:
 
     def _make_event(self, event: str, data: dict) -> tuple[str, dict]:
         return (event, data)
+
+    async def _llm_retry(self, sub_id: int, label: str, fn, queue, *args, **kwargs):
+        for attempt in range(1, _LLM_RETRIES + 2):
+            try:
+                return await fn(*args, **kwargs)
+            except Exception:
+                if attempt <= _LLM_RETRIES:
+                    await queue.put(self._make_event(
+                        "log", {"phase": "executing", "message": f"子任务 {sub_id} {label}第{attempt}次失败，重试..."}
+                    ))
+                    await asyncio.sleep(1.5)
+        raise
 
 
 def _extract_result(r: dict) -> dict:
