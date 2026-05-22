@@ -46,7 +46,7 @@
             <button v-for="ex in examples" :key="ex" class="example-chip" :disabled="loading" @click="topic = ex">{{ ex }}</button>
           </div>
 
-          <Transition name="fade">
+          <Transition name="history-slide">
             <div v-if="history.length > 0" class="history-section">
               <div class="history-header">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
@@ -503,7 +503,7 @@ function updateSubtaskState(card: ResearchCardData, id: number, updates: Partial
 .example-chip:hover:not(:disabled) { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.18); color: var(--text-secondary); }
 .example-chip:disabled { opacity: 0.4; cursor: not-allowed; }
 
-.history-section { width: 100%; margin-top: 4px; }
+.history-section { width: 100%; margin-top: 4px; overflow: hidden; }
 .history-header { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-muted); margin-bottom: 6px; }
 .history-clear { margin-left: auto; background: none; border: none; color: var(--text-muted); font-size: 10px; font-family: 'Exo', sans-serif; cursor: pointer; padding: 2px 6px; border-radius: 4px; transition: color var(--transition-fast); }
 .history-clear:hover { color: #f87171; }
@@ -671,8 +671,24 @@ function updateSubtaskState(card: ResearchCardData, id: number, updates: Partial
   color: #f87171;
 }
 
-.fade-enter-active, .fade-leave-active { transition: opacity 300ms ease, transform 300ms ease; }
-.fade-enter-from, .fade-leave-to { opacity: 0; transform: translateY(-8px); }
+.history-slide-enter-active,
+.history-slide-leave-active {
+  transition: opacity 300ms ease, max-height 300ms ease, margin 300ms ease, padding 300ms ease;
+  overflow: hidden;
+}
+.history-slide-enter-from,
+.history-slide-leave-to {
+  opacity: 0;
+  max-height: 0;
+  margin-top: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+.history-slide-enter-to,
+.history-slide-leave-from {
+  opacity: 1;
+  max-height: 200px;
+}
 
 .panel-enter-active {
   transition: opacity 400ms cubic-bezier(0, 0, 0.2, 1), transform 400ms cubic-bezier(0, 0, 0.2, 1);
