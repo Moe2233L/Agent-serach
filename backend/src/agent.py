@@ -4,6 +4,7 @@ import asyncio
 import json
 import re
 import uuid
+from collections import OrderedDict
 
 from backend.src.config import settings
 from backend.src.models import (
@@ -20,6 +21,9 @@ from backend.src.services.task_summarizer import TaskSummarizer
 from backend.src.services.report_writer import ReportWriter
 from langchain_openai import ChatOpenAI
 
+_MD_LINK_RE = re.compile(r"\[([^\]]+)\]\([^)]+\)")
+_MAX_STATES = 50
+
 
 class ResearchAgent:
     def __init__(self):
@@ -32,7 +36,7 @@ class ResearchAgent:
         self.todo_planner = TODOPlanner(llm)
         self.task_summarizer = TaskSummarizer(llm)
         self.report_writer = ReportWriter(llm)
-        self.research_states: dict[str, ResearchState] = {}
+        self.research_states: OrderedDict[str, ResearchState] = OrderedDict()
 
     def get_state(self, research_id: str) -> ResearchState | None:
         return self.research_states.get(research_id)
@@ -53,6 +57,10 @@ class ResearchAgent:
         state = self.research_states.get(research_id)
         if not state:
             yield self._make_event("error", {"error": "研究不存在或已过期"})
+            return
+
+        if state.status != ResearchStatus.completed:
+            yield self._make_event("error", {"error": "只能在研究完成后追问"})
             return
 
         state.phase = ResearchPhase.executing
@@ -100,6 +108,8 @@ class ResearchAgent:
 
         state.status = ResearchStatus.completed
         self.research_states[state.research_id] = state
+        if len(self.research_states) > _MAX_STATES:
+            self.research_states.popitem(last=False)
         yield self._make_event("completed", {"research_id": state.research_id})
 
     async def _planning_phase(self, state: ResearchState, subtask_count: int):
@@ -248,4 +258,4 @@ def _format_all_sources(subtasks: list) -> str:
 
 
 def _strip_md_links(text: str) -> str:
-    return re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)
+    return _MD_LINK_RE.sub(r"\1", text)

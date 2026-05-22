@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from backend.src.agent import ResearchAgent
 from backend.src.models import FollowupRequest, ResearchRequest
 
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 app = FastAPI(title="Research Agent API", version="1.0.0")
 
 app.add_middleware(
