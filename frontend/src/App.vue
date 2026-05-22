@@ -138,6 +138,7 @@ import ParticleNetwork from './components/ParticleNetwork.vue'
 import ResearchCard from './components/ResearchCard.vue'
 import type { ResearchCardData, SubtaskState, LogState } from './types/research'
 import { readSSEStream } from './utils/sse'
+import { ensureCriticFeedback, REPORT_DIMENSIONS, SUBTASK_DIMENSIONS } from './types/research'
 
 const STORAGE_KEY = 'research_history'
 const topic = ref('')
@@ -170,7 +171,20 @@ const layoutShifted = ref(false)
 onMounted(() => {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) history.value = JSON.parse(raw)
+    if (raw) {
+      const parsed: ResearchCardData[] = JSON.parse(raw)
+      for (const record of parsed) {
+        record.reportCriticFeedback = ensureCriticFeedback(record.reportCriticFeedback, REPORT_DIMENSIONS)
+        if (record.subtaskCriticFeedback) {
+          for (const id of Object.keys(record.subtaskCriticFeedback)) {
+            record.subtaskCriticFeedback[+id] = ensureCriticFeedback(
+              record.subtaskCriticFeedback[+id], SUBTASK_DIMENSIONS
+            )!
+          }
+        }
+      }
+      history.value = parsed
+    }
   } catch { history.value = [] }
 })
 
@@ -405,6 +419,14 @@ function handleCardEvent(card: ResearchCardData, event: string, data: any) {
       card.controller = null
       card.id = data.research_id
       const record: ResearchCardData = JSON.parse(JSON.stringify(card))
+      record.reportCriticFeedback = ensureCriticFeedback(record.reportCriticFeedback, REPORT_DIMENSIONS)
+      if (record.subtaskCriticFeedback) {
+        for (const id of Object.keys(record.subtaskCriticFeedback)) {
+          record.subtaskCriticFeedback[+id] = ensureCriticFeedback(
+            record.subtaskCriticFeedback[+id], SUBTASK_DIMENSIONS
+          )!
+        }
+      }
       record.logs = []
       record.subtasks = card.subtasks.map(s => ({ id: s.id, title: s.title, query: s.query, status: 'completed' as const, summary: s.summary || '' }))
       record.timestamp = Date.now()

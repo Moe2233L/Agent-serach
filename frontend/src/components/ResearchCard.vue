@@ -97,7 +97,7 @@
               </button>
             </div>
             <MarkdownViewer :content="report" />
-            <div v-if="reportCriticFeedback" class="critic-section">
+            <div v-if="!isHistory && reportCriticFeedback" class="critic-section">
               <div class="critic-header" @click="toggleCritic">
                 <div class="critic-header-left">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
@@ -177,7 +177,7 @@ onMounted(() => {
   if (bodyRef.value) {
     bodyObserver.value = new MutationObserver(() => {
         if (!collapsed.value) {
-          bodyRef.value!.style.maxHeight = bodyRef.value!.scrollHeight + 4 + 'px'
+          bodyRef.value!.style.maxHeight = bodyRef.value!.scrollHeight + 40 + 'px'
         }
       })
     bodyObserver.value.observe(bodyRef.value, {
@@ -202,10 +202,10 @@ function toggleCollapse() {
   if (collapsed.value) {
     collapsed.value = false
     const h = el.scrollHeight
-    el.style.maxHeight = h + 4 + 'px'
+    el.style.maxHeight = h + 40 + 'px'
   } else {
     const h = el.scrollHeight
-    el.style.maxHeight = h + 4 + 'px'
+    el.style.maxHeight = h + 40 + 'px'
     requestAnimationFrame(() => {
       el.style.maxHeight = '0px'
     })
@@ -216,7 +216,7 @@ function toggleCollapse() {
 watch(() => props.report, async () => {
   if (bodyRef.value && !collapsed.value) {
     await nextTick()
-    bodyRef.value.style.maxHeight = bodyRef.value.scrollHeight + 4 + 'px'
+    bodyRef.value.style.maxHeight = bodyRef.value.scrollHeight + 40 + 'px'
   }
 })
 
@@ -518,7 +518,7 @@ function dimLabel(key: string): string {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding-bottom: 2px;
+  padding-bottom: 16px;
 }
 
 .step-bar {

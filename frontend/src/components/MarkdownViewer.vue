@@ -32,7 +32,7 @@ const rendered = computed(() => {
   color: var(--text-primary);
   font-size: 14px;
   overflow-y: auto;
-  max-height: 60vh;
+  max-height: 55vh;
   padding-right: 4px;
   scrollbar-width: thin;
   scrollbar-color: rgba(255,255,255,0.1) transparent;
