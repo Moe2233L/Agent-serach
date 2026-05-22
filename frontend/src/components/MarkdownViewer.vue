@@ -32,7 +32,8 @@ const rendered = computed(() => {
   color: var(--text-primary);
   font-size: 14px;
   overflow-y: auto;
-  max-height: 55vh;
+  overflow-x: hidden;
+  max-height: 65vh;
   padding-right: 4px;
   scrollbar-width: thin;
   scrollbar-color: rgba(255,255,255,0.1) transparent;
@@ -130,6 +131,9 @@ const rendered = computed(() => {
   color: var(--accent-blue);
   text-decoration: none;
   transition: opacity var(--transition-fast);
+  overflow-wrap: anywhere;
+  word-break: break-all;
+  hyphens: auto;
 }
 
 .markdown-viewer :deep(a:hover) {
@@ -150,6 +154,7 @@ const rendered = computed(() => {
 .markdown-viewer :deep(ol) {
   padding-left: 24px;
   margin-bottom: 12px;
+  overflow-wrap: anywhere;
 }
 
 .markdown-viewer :deep(ol li) {
@@ -157,12 +162,17 @@ const rendered = computed(() => {
   color: var(--text-muted);
   margin-bottom: 4px;
   line-height: 1.6;
-  word-break: break-all;
+  overflow-wrap: anywhere;
 }
 
 .markdown-viewer :deep(ol li a) {
   color: var(--accent-blue);
   font-size: 12px;
+  display: inline-block;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-all;
+  hyphens: auto;
 }
 
 /* 正文中 [1] 引用样式 */

@@ -518,7 +518,7 @@ function dimLabel(key: string): string {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding-bottom: 16px;
+  padding-bottom: 1px;
 }
 
 .step-bar {
