@@ -32,27 +32,27 @@
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                    Frontend (Vite :5173)                 │
+│                    Frontend (Vite :5173)                │
 │  ┌──────────┐  ┌──────────────┐  ┌───────────────────┐  │
 │  │ App.vue  │  │ ResearchCard │  │ MarkdownViewer    │  │
-│  │ SSE 消费 │→│ 步骤/进度/日志 │→│ 报告渲染/下载     │  │
+│  │ SSE 消费  │→ │ 步骤/进度/日志 │→ │ 报告渲染/下载       │  │
 │  └──────────┘  └──────────────┘  └───────────────────┘  │
 └──────────────────────┬──────────────────────────────────┘
                        │ POST /research/stream (SSE)
                        │ event: log / phase / subtasks / ...
                  ┌─────┴──────┐
-                 │ Vite Proxy  │
+                 │ Vite Proxy │
                  └─────┬──────┘
 ┌──────────────────────┴──────────────────────────────────┐
-│                   Backend (Uvicorn :8000)                 │
+│                   Backend (Uvicorn :8000)               │
 │  ┌──────────┐  ┌──────────────┐  ┌───────────────────┐  │
-│  │ main.py  │→│   agent.py   │→│    services/       │  │
+│  │ main.py  │→ │   agent.py   │→ │    services/      │  │
 │  │ FastAPI  │  │ ResearchAgent│  │ todo_planner      │  │
-│  │ SSE 端点 │  │ 三阶段编排    │  │ search_tool       │  │
-│  └──────────┘  └──────────────┘  │ task_summarizer     │
-│                                  │ report_writer       │
-│                                  └─────────────────────┘
-└──────────────────────────────────────────────────────────┘
+│  │ SSE 端点 │   │ 三阶段编排    │  │ search_tool       │  │
+│  └──────────┘  └──────────────┘  │ task_summarizer   │  │
+│                                  │ report_writer     │  │
+│                                  └───────────────────┘  │
+└─────────────────────────────────────────────────────────┘
 ```
 
 ### 研究流程
@@ -160,9 +160,11 @@ Agent/
 │       ├── style.css             # 全局样式 / CSS 变量 / 主题
 │       ├── App.vue               # 主布局（左右双栏）+ SSE 事件消费
 │       ├── types/
-│       │   └── research.ts       # TypeScript 类型定义
+│       │   └── research.ts       # TypeScript 类型定义（SubtaskState, LogState, ResearchCardData）
+│       ├── utils/
+│       │   └── sse.ts            # SSE 流解析通用函数
 │       └── components/
-│           ├── ResearchCard.vue   # 研究卡片（步骤条 / 进度条 / 子任务 / 日志 / 报告）
+│           ├── ResearchCard.vue   # 研究卡片（步骤条 / 进度条 / 子任务 / 日志 / 报告 / 错误提示）
 │           ├── MarkdownViewer.vue # Markdown 渲染与样式
 │           └── ParticleNetwork.vue # Canvas 粒子背景动画
 ├── .env.example                  # 环境变量模板

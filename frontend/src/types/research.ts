@@ -1,41 +1,25 @@
-export interface SubtaskPlan {
+export interface SubtaskState {
   id: number
   title: string
   query: string
-}
-
-export interface Progress {
-  current: number
-  total: number
-}
-
-export interface SubtaskStatusPayload {
-  id: number
   status: string
-  title: string
-  progress?: Progress
+  summary?: string
 }
 
-export interface SubtaskCompletedPayload {
-  id: number
-  title: string
-  summary: string
-}
-
-export interface LogPayload {
+export interface LogState {
   phase: string
+  phaseLabel: string
   message: string
 }
 
-export interface ReportPayload {
+export interface ResearchCardData {
+  id: string
+  topic: string
+  subtasks: SubtaskState[]
+  logs: LogState[]
   report: string
-}
-
-export interface SubtasksPayload {
-  subtasks: SubtaskPlan[]
-}
-
-export interface SSEEvent {
-  event: string
-  data: any
+  status: string
+  error: string
+  timestamp?: number
+  controller?: AbortController | null
 }

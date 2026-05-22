@@ -1,5 +1,5 @@
 <template>
-  <div class="research-card" :class="{ completed: isCompleted }" @click="toggleCollapse">
+  <div class="research-card" :class="{ completed: isCompleted, errored: !!error }" @click="toggleCollapse">
     <div class="card-header">
       <div class="card-title-group">
         <span class="card-status-dot" :class="statusClass"></span>
@@ -9,14 +9,28 @@
         <button v-if="showCancel" class="card-cancel" @click.stop="$emit('cancel')" title="取消研究">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
         </button>
+        <button v-else-if="!isHistory" class="card-close" @click.stop="$emit('remove')" title="关闭">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
         <button class="card-toggle" :class="{ rotated: !collapsed }" @click.stop="toggleCollapse" title="折叠/展开">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>
         </button>
-        <button v-if="!isHistory" class="card-close" @click.stop="$emit('remove')" title="关闭">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
-        </button>
       </div>
     </div>
+
+    <template v-if="!isHistory">
+      <div class="progress-section">
+        <div class="progress-track">
+          <div class="progress-bar-fill" :style="{ width: progressPercent + '%' }"></div>
+        </div>
+        <div class="progress-label">
+          <span>整体进度</span>
+          <span class="progress-value">{{ progressPercent }}%</span>
+        </div>
+      </div>
+    </template>
+
+    <div v-if="error" class="card-error">{{ error }}</div>
 
     <div ref="bodyRef" class="collapsible-body" :class="{ collapsed }">
       <div class="collapsible-inner">
@@ -30,14 +44,6 @@
               </div>
               <span class="step-label">{{ step }}</span>
             </div>
-          </div>
-
-          <div class="progress-track">
-            <div class="progress-bar-fill" :style="{ width: progressPercent + '%' }"></div>
-          </div>
-          <div class="progress-label">
-            <span>整体进度</span>
-            <span class="progress-value">{{ progressPercent }}%</span>
           </div>
 
           <div v-if="currentPhase === 0 && (!subtasks || subtasks.length === 0)" class="skeleton">
@@ -95,32 +101,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import MarkdownViewer from './MarkdownViewer.vue'
-
-export interface SubtaskState {
-  id: number
-  title: string
-  query: string
-  status: string
-  summary?: string
-}
-
-export interface LogState {
-  phase: string
-  phaseLabel: string
-  message: string
-}
-
-export interface ResearchCardData {
-  id: string
-  topic: string
-  subtasks: SubtaskState[]
-  logs: LogState[]
-  report: string
-  status: string
-  error: string
-  timestamp?: number
-  controller?: AbortController | null
-}
+import type { SubtaskState, LogState } from '../types/research'
 
 const props = defineProps<{
   topic: string
@@ -143,12 +124,7 @@ const bodyRef = ref<HTMLElement | null>(null)
 const collapsed = ref(false)
 
 watch(() => props.isHistory, (val) => {
-  if (val) {
-    collapsed.value = true
-    nextTick(() => {
-      if (bodyRef.value) bodyRef.value.style.maxHeight = '0px'
-    })
-  }
+  if (val) collapsed.value = true
 }, { immediate: true })
 
 const bodyObserver = ref<MutationObserver | null>(null)
@@ -194,20 +170,11 @@ function toggleCollapse() {
 }
 
 watch(() => props.report, async () => {
-  if (bodyRef.value) {
-    collapsed.value = false
+  if (bodyRef.value && !collapsed.value) {
     await nextTick()
     bodyRef.value.style.maxHeight = bodyRef.value.scrollHeight + 'px'
   }
 })
-
-const completedCount = computed(() =>
-  (props.subtasks || []).filter(s => s.status === 'completed').length
-)
-
-const totalCount = computed(() =>
-  (props.subtasks || []).length
-)
 
 const progressPercent = computed(() => {
   if (props.status === 'completed') return 100
@@ -299,6 +266,8 @@ function downloadReport() {
   gap: 12px;
   transition: all var(--transition-smooth);
   animation: cardMount 500ms cubic-bezier(0, 0, 0.2, 1);
+  overflow: hidden;
+  min-width: 0;
 }
 
 @keyframes cardMount {
@@ -315,6 +284,22 @@ function downloadReport() {
 .research-card.completed {
   border-color: rgba(59, 130, 246, 0.12);
   background: rgba(59, 130, 246, 0.02);
+}
+
+.research-card.errored {
+  border-color: rgba(248, 113, 113, 0.15);
+  background: rgba(248, 113, 113, 0.02);
+}
+
+.card-error {
+  font-size: 12px;
+  color: #f87171;
+  padding: 6px 10px;
+  background: rgba(248, 113, 113, 0.06);
+  border: 1px solid rgba(248, 113, 113, 0.1);
+  border-radius: var(--radius-sm);
+  font-family: 'Roboto Mono', monospace;
+  word-break: break-all;
 }
 
 .card-header {
@@ -448,6 +433,7 @@ function downloadReport() {
 
 .collapsible-body.collapsed {
   opacity: 0;
+  max-height: 0;
 }
 
 .collapsible-inner {
@@ -561,6 +547,10 @@ function downloadReport() {
   font-size: 13px;
   font-weight: 700;
   color: var(--accent-blue);
+}
+
+.progress-section {
+  flex-shrink: 0;
 }
 
 /* --- Skeleton --- */

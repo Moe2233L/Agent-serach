@@ -2,18 +2,21 @@
   <div class="markdown-viewer" v-html="rendered"></div>
 </template>
 
-<script setup lang="ts">
-import { computed } from 'vue'
+<script lang="ts">
 import { marked } from 'marked'
-
-const props = defineProps<{
-  content: string
-}>()
 
 marked.setOptions({
   gfm: true,
   breaks: true,
 })
+</script>
+
+<script setup lang="ts">
+import { computed } from 'vue'
+
+const props = defineProps<{
+  content: string
+}>()
 
 const rendered = computed(() => {
   if (!props.content) return ''

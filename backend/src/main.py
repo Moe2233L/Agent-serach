@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from backend.src.agent import ResearchAgent
-from backend.src.models import ResearchRequest
+from backend.src.models import FollowupRequest, ResearchRequest
 
 app = FastAPI(title="Research Agent API", version="1.0.0")
 
@@ -57,6 +57,46 @@ async def research_stream(request: ResearchRequest, raw_request: Request):
             max_results=request.max_results,
             subtask_count=request.subtask_count,
         ):
+            if await raw_request.is_disconnected():
+                break
+            parsed = json.loads(event_json)
+            yield f"event: {parsed['event']}\ndata: {json.dumps(parsed['data'], ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@app.post("/research/{research_id}/followup")
+async def research_followup(research_id: str, request: FollowupRequest, raw_request: Request):
+    if not research_agent:
+        return JSONResponse(
+            {"error": "ResearchAgent 未初始化"},
+            status_code=500,
+        )
+
+    question = request.question.strip()
+    if not question:
+        return JSONResponse(
+            {"error": "追问内容不能为空"},
+            status_code=400,
+        )
+
+    state = research_agent.get_state(research_id)
+    if not state:
+        return JSONResponse(
+            {"error": "研究不存在或已过期"},
+            status_code=404,
+        )
+
+    async def event_generator():
+        async for event_json in research_agent.followup(research_id, question):
             if await raw_request.is_disconnected():
                 break
             parsed = json.loads(event_json)

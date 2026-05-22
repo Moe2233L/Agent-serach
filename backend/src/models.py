@@ -58,6 +58,10 @@ class ResearchRequest(BaseModel):
     subtask_count: int = Field(default=3, ge=1, le=8)
 
 
+class FollowupRequest(BaseModel):
+    question: str
+
+
 class SubtaskPlan(BaseModel):
     title: str = Field(description="子任务标题")
     query: str = Field(description="用于搜索的关键词")

@@ -159,6 +159,7 @@ onMounted(() => {
   window.addEventListener('resize', resize)
   window.addEventListener('mousemove', onMouseMove)
   window.addEventListener('mouseleave', onMouseLeave)
+  document.addEventListener('visibilitychange', onVisibilityChange)
 
   tick(ctx)
 })
@@ -168,7 +169,20 @@ onBeforeUnmount(() => {
   window.removeEventListener('resize', resize)
   window.removeEventListener('mousemove', onMouseMove)
   window.removeEventListener('mouseleave', onMouseLeave)
+  document.removeEventListener('visibilitychange', onVisibilityChange)
 })
+
+function onVisibilityChange() {
+  if (document.hidden && animationId !== null) {
+    cancelAnimationFrame(animationId)
+    animationId = null
+  } else if (!document.hidden && !prefersReducedMotion.value) {
+    const canvas = canvasRef.value
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    if (ctx) tick(ctx)
+  }
+}
 </script>
 
 <style scoped>

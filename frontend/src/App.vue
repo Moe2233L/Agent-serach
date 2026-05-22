@@ -92,6 +92,26 @@
               @remove="removeCard(i)"
               @cancel="handleCancel(i)"
             />
+            <div v-if="historyPreview" class="history-followup">
+              <div class="followup-heading">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                <span>追问</span>
+              </div>
+              <form class="followup-form" @submit.prevent="handleHistoryFollowup">
+                <input
+                  v-model="followupQuestion"
+                  type="text"
+                  class="followup-input"
+                  placeholder="对此研究报告进行追问..."
+                  :disabled="followupLoading"
+                />
+                <button type="submit" class="followup-send" :disabled="followupLoading || !followupQuestion.trim()">
+                  <span v-if="followupLoading" class="followup-spinner"></span>
+                  <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                </button>
+              </form>
+              <span v-if="followupError" class="followup-error">{{ followupError }}</span>
+            </div>
           </div>
         </div>
       </Transition>
@@ -100,10 +120,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, watch, onMounted } from 'vue'
+import { ref, reactive, computed, watch, onMounted, nextTick } from 'vue'
 import ParticleNetwork from './components/ParticleNetwork.vue'
 import ResearchCard from './components/ResearchCard.vue'
-import type { ResearchCardData, SubtaskState, LogState } from './components/ResearchCard.vue'
+import type { ResearchCardData, SubtaskState, LogState } from './types/research'
+import { readSSEStream } from './utils/sse'
 
 const STORAGE_KEY = 'research_history'
 const topic = ref('')
@@ -113,6 +134,9 @@ const subtaskCount = ref(3)
 const cards = ref<ResearchCardData[]>([])
 const history = ref<ResearchCardData[]>([])
 const historyPreview = ref<ResearchCardData | null>(null)
+const followupQuestion = ref('')
+const followupLoading = ref(false)
+const followupError = ref('')
 
 const examples = [
   '人工智能在医疗领域的应用',
@@ -149,15 +173,13 @@ function formatTime(ts: number | undefined) {
 
 function openHistory(record: ResearchCardData) {
   historyPreview.value = record
-  if (layoutShifted.value) {
-    layoutShifted.value = false
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        layoutShifted.value = true
-      })
-    })
-  } else {
+  if (!layoutShifted.value) {
     layoutShifted.value = true
+  } else {
+    layoutShifted.value = false
+    nextTick(() => {
+      layoutShifted.value = true
+    })
   }
 }
 
@@ -188,12 +210,55 @@ function handleCancel(index: number) {
   }
 }
 
+async function handleHistoryFollowup() {
+  const q = followupQuestion.value.trim()
+  const card = historyPreview.value
+  if (!q || !card) return
+
+  followupLoading.value = true
+  followupError.value = ''
+
+  try {
+    const response = await fetch(`/research/${card.id}/followup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question: q }),
+    })
+
+    if (!response.ok) {
+      followupError.value = `追问请求失败: ${response.status}`
+      return
+    }
+
+    const reader = response.body?.getReader()
+    if (!reader) { followupError.value = '无法读取响应流'; return }
+
+    card.status = 'executing'
+
+    await readSSEStream(reader, (event, data) => {
+      if (event === 'report_append_prefix') {
+        card.report = (card.report || '') + data.prefix
+      } else if (event === 'report_chunk') {
+        card.report = (card.report || '') + data.chunk
+      } else if (event === 'followup_completed') {
+        card.status = 'completed'
+      }
+    })
+    card.status = 'completed'
+  } catch (err: any) {
+    if (err.name !== 'AbortError') followupError.value = err.message || '追问连接出错'
+  } finally {
+    followupLoading.value = false
+    followupQuestion.value = ''
+  }
+}
+
 async function handleSubmit() {
   const trimmed = topic.value.trim()
   if (!trimmed || loading.value) return
 
   loading.value = true
-  const cardId = Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
+  const cardId = crypto.randomUUID()
 
   const card = reactive({
     id: cardId,
@@ -246,28 +311,9 @@ async function startStream(card: ResearchCardData) {
     const reader = response.body?.getReader()
     if (!reader) { card.error = '无法读取响应流'; return }
 
-    const decoder = new TextDecoder()
-    let buffer = ''
-
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-
-      buffer += decoder.decode(value, { stream: true })
-      const lines = buffer.split('\n')
-      buffer = lines.pop() || ''
-
-      let currentEvent = ''
-      for (const line of lines) {
-        if (line.startsWith('event: ')) currentEvent = line.slice(7).trim()
-        else if (line.startsWith('data: ')) {
-          try {
-            const data = JSON.parse(line.slice(6).trim())
-            handleCardEvent(card, currentEvent, data)
-          } catch {}
-        }
-      }
-    }
+    await readSSEStream(reader, (event, data) => {
+      handleCardEvent(card, event, data)
+    }, controller.signal)
   } catch (err: any) {
     if (err.name !== 'AbortError') card.error = err.message || '连接出错'
   }
@@ -313,6 +359,7 @@ function handleCardEvent(card: ResearchCardData, event: string, data: any) {
     case 'completed':
       card.status = 'completed'
       card.controller = null
+      card.id = data.research_id
       const record: ResearchCardData = JSON.parse(JSON.stringify(card))
       record.logs = []
       record.subtasks = card.subtasks.map(s => ({ id: s.id, title: s.title, query: s.query, status: 'completed' as const, summary: s.summary || '' }))
@@ -348,9 +395,10 @@ function updateSubtaskState(card: ResearchCardData, id: number, updates: Partial
 
 .layout-track {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   width: 100%;
   max-width: 1400px;
+  height: 100%;
   gap: 0;
   transition: transform 600ms cubic-bezier(0.4, 0, 0.2, 1),
               gap 600ms cubic-bezier(0.4, 0, 0.2, 1);
@@ -474,6 +522,8 @@ function updateSubtaskState(card: ResearchCardData, id: number, updates: Partial
   flex-direction: column;
   padding: 24px 24px 24px 0;
   min-width: 0;
+  min-height: 0;
+  max-height: 100%;
 }
 
 .panel-header {
@@ -526,6 +576,99 @@ function updateSubtaskState(card: ResearchCardData, id: number, updates: Partial
   gap: 12px;
   scrollbar-width: thin;
   scrollbar-color: rgba(255,255,255,0.06) transparent;
+}
+
+.history-followup {
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-md);
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.followup-heading {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent-blue);
+}
+
+.followup-form {
+  display: flex;
+  gap: 6px;
+}
+
+.followup-input {
+  flex: 1;
+  height: 32px;
+  padding: 0 10px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-family: 'Exo', sans-serif;
+  outline: none;
+  transition: all var(--transition-fast);
+}
+
+.followup-input:focus {
+  border-color: rgba(59,130,246,0.35);
+  background: rgba(255,255,255,0.07);
+}
+
+.followup-input::placeholder {
+  color: var(--text-muted);
+}
+
+.followup-input:disabled {
+  opacity: 0.5;
+}
+
+.followup-send {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(59,130,246,0.1);
+  border: 1px solid rgba(59,130,246,0.2);
+  border-radius: 6px;
+  color: var(--accent-blue);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.followup-send:hover:not(:disabled) {
+  background: rgba(59,130,246,0.2);
+  border-color: rgba(59,130,246,0.35);
+}
+
+.followup-send:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.followup-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255,255,255,0.3);
+  border-top-color: var(--accent-blue);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+.followup-error {
+  display: block;
+  font-size: 11px;
+  color: #f87171;
 }
 
 .fade-enter-active, .fade-leave-active { transition: opacity 300ms ease, transform 300ms ease; }
