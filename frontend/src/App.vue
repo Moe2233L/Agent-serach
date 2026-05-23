@@ -141,6 +141,7 @@ import { readSSEStream } from './utils/sse'
 import { ensureCriticFeedback, REPORT_DIMENSIONS, SUBTASK_DIMENSIONS } from './types/research'
 
 const STORAGE_KEY = 'research_history'
+const API_BASE = 'http://127.0.0.1:8000'
 const topic = ref('')
 const loading = ref(false)
 const maxResults = ref(5)
@@ -251,7 +252,7 @@ async function handleHistoryFollowup() {
   followupError.value = ''
 
   try {
-    const response = await fetch(`/research/${card.id}/followup`, {
+    const response = await fetch(`${API_BASE}/research/${card.id}/followup`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ question: q }),
@@ -324,7 +325,7 @@ async function startStream(card: ResearchCardData) {
   card.controller = controller
 
   try {
-    const response = await fetch('/research/stream', {
+    const response = await fetch(`${API_BASE}/research/stream`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

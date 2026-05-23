@@ -50,6 +50,7 @@
 - Python 3.10+
 - Node.js 18+
 - OpenAI API Key（或兼容 API 的第三方服务，如 DeepSeek、通义千问等）
+- **网络要求**：搜索引擎基于 DuckDuckGo (DDGS)，在中国大陆使用需要在 `.env` 中配置 `SEARCH_PROXY`（见下方说明）
 
 ### 1. 安装后端
 
@@ -69,9 +70,12 @@ OPENAI_BASE_URL=https://api.openai.com/v1
 LLM_MODEL=gpt-4o-mini
 LLM_TEMPERATURE=0.3
 SEARCH_MAX_RESULTS=5
+SEARCH_PROXY=                    # 可选：中国大陆使用需设代理，如 http://127.0.0.1:7890
 LLM_TIMEOUT=60
 ```
 
+> 🌐 **网络注意事项**：项目使用 DuckDuckGo (DDGS) 作为搜索引擎。在国内网络环境下，DDGS 无法直接访问，必须在 `.env` 中配置 `SEARCH_PROXY`（如 `http://127.0.0.1:7890`），否则搜索阶段会全部超时报错，报告内容为空。
+>
 > ⚠️ **安全提示**：`.env` 文件包含敏感 API 密钥，已默认加入 `.gitignore`。请勿手动将其加入版本控制，防止密钥泄露。如不慎提交，请立即轮换密钥。
 
 ### 2. 启动后端
@@ -241,7 +245,7 @@ Agent/
 | `LLM_MODEL` | `gpt-4o-mini` | 模型名称，需与 API 提供商匹配 |
 | `LLM_TEMPERATURE` | `0.3` | 生成温度，范围 0-2，越低越确定 |
 | `SEARCH_MAX_RESULTS` | `5` | 每个子任务的搜索结果上限 |
-| `SEARCH_PROXY` | (空) | 搜索引擎使用的 HTTP/HTTPS 代理 |
+| `SEARCH_PROXY` | (空) | 搜索引擎使用的 HTTP/HTTPS 代理。中国大陆网络必须配置此项（如 `http://127.0.0.1:7890`），否则 DuckDuckGo 无法访问 |
 | `LLM_TIMEOUT` | `60` | LLM 请求超时时间(秒)，防止网络卡住研究流程 |
 | `SUBTASK_COUNT` | `3` | 默认子任务数量 |
 
