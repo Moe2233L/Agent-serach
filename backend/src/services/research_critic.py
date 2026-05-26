@@ -7,33 +7,41 @@ from langchain_openai import ChatOpenAI
 from backend.src.services.utils import extract_json_block, parse_json
 
 
+# 报告评分的维度定义
 _REPORT_DIMENSIONS = ["structure", "depth", "citation_accuracy", "readability", "completeness"]
+# 子任务总结评分的维度定义
 _SUBTASK_DIMENSIONS = ["relevance", "depth", "clarity", "citation_quality"]
 
 
+# 确保评分结果的维度字段完整且值合法（1-10 范围内）
 def _ensure_dimensions(result: dict, expected: list[str]) -> dict:
     dims = result.get("dimensions", {})
     if not isinstance(dims, dict):
         dims = {}
+    # 补充缺失维度或修正非法值
     for key in expected:
         val = dims.get(key)
         if not isinstance(val, (int, float)) or val < 1 or val > 10:
             dims[key] = 7
     result["dimensions"] = dims
+    # 计算综合评分（各维度均值，四舍五入）
     scores = [v for v in dims.values() if isinstance(v, (int, float))]
     raw = result.get("overall_score")
     if not isinstance(raw, (int, float)) or raw < 1 or raw > 10:
         result["overall_score"] = round(sum(scores) / len(scores)) if scores else 7
+    # 确保数组字段存在
     for field in ("strengths", "weaknesses", "suggestions"):
         if not isinstance(result.get(field), list):
             result[field] = []
     return result
 
 
+# 质量评审器：对子任务总结和最终报告进行多维评分，低于阈值则自动重写
 class ResearchCritic:
     def __init__(self, llm: ChatOpenAI):
         self.llm = llm
 
+        # 子任务总结质量评审 prompt
         self.subtask_critic_prompt = ChatPromptTemplate.from_messages([
             (
                 "system",
@@ -96,6 +104,7 @@ class ResearchCritic:
         ])
         self.subtask_critic_chain = self.subtask_critic_prompt | self.llm | StrOutputParser()
 
+        # 完整报告质量评审 prompt
         self.report_critic_prompt = ChatPromptTemplate.from_messages([
             (
                 "system",
@@ -158,6 +167,7 @@ class ResearchCritic:
         ])
         self.report_critic_chain = self.report_critic_prompt | self.llm | StrOutputParser()
 
+        # 报告重写 prompt：根据评审反馈改进报告
         self.rewrite_prompt = ChatPromptTemplate.from_messages([
             (
                 "system",
@@ -197,6 +207,7 @@ class ResearchCritic:
         ])
         self.rewrite_chain = self.rewrite_prompt | self.llm | StrOutputParser()
 
+    # 评审单个子任务总结的质量
     async def acritic_subtask_summary(self, title: str, query: str, summary: str) -> dict:
         response = await self.subtask_critic_chain.ainvoke({
             "title": title,
@@ -206,6 +217,7 @@ class ResearchCritic:
         raw = extract_json_block(response)
         return _ensure_dimensions(parse_json(raw), _SUBTASK_DIMENSIONS)
 
+    # 评审整份研究报告的质量
     async def acritic_report(self, topic: str, report: str) -> dict:
         response = await self.report_critic_chain.ainvoke({
             "topic": topic,
@@ -214,6 +226,7 @@ class ResearchCritic:
         raw = extract_json_block(response)
         return _ensure_dimensions(parse_json(raw), _REPORT_DIMENSIONS)
 
+    # 根据评审反馈流式重写报告
     async def arewrite_report_stream(self, topic: str, report: str, critic_feedback: str):
         async for chunk in self.rewrite_chain.astream({
             "topic": topic,

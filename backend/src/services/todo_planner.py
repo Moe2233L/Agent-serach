@@ -8,9 +8,11 @@ from backend.src.models import Subtask
 from backend.src.services.utils import extract_json_block, parse_json
 
 
+# 研究任务规划器：将用户输入的研究主题分解为多个可独立搜索的子任务
 class TODOPlanner:
     def __init__(self, llm: ChatOpenAI):
         self.llm = llm
+        # 规划 prompt：要求 LLM 将主题分解为 {count} 个不重叠的子任务
         self.prompt = ChatPromptTemplate.from_messages([
             (
                 "system",
@@ -29,10 +31,13 @@ class TODOPlanner:
         ])
         self.chain = self.prompt | self.llm | StrOutputParser()
 
+    # 异步执行规划，返回 Subtask 对象列表
     async def aplan(self, topic: str, count: int = 3) -> list[Subtask]:
+        # 调用 LLM 获取子任务 JSON 列表
         response = await self.chain.ainvoke({"topic": topic, "count": count})
         raw = extract_json_block(response)
         data = parse_json(raw)
+        # 转换为 Subtask 模型列表，从 1 开始编号
         return [
             Subtask(id=i, title=item["title"], query=item["query"])
             for i, item in enumerate(data["subtasks"], 1)

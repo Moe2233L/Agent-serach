@@ -4,9 +4,12 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 
+
+# 报告撰写器：将各子任务总结整合成结构化研究报告
 class ReportWriter:
     def __init__(self, llm: ChatOpenAI):
         self.llm = llm
+        # 主报告生成 prompt
         self.prompt = ChatPromptTemplate.from_messages([
             (
                 "system",
@@ -59,6 +62,7 @@ class ReportWriter:
         ])
         self.chain = self.prompt | self.llm | StrOutputParser()
 
+        # 追问回答 prompt
         self.followup_prompt = ChatPromptTemplate.from_messages([
             (
                 "system",
@@ -85,10 +89,12 @@ class ReportWriter:
         ])
         self.followup_chain = self.followup_prompt | self.llm | StrOutputParser()
 
+    # 流式生成研究报告（逐 chunk 产出 markdown 文本）
     async def awrite_stream(self, topic: str, summaries: str, search_results: str = ""):
         async for chunk in self.chain.astream({"topic": topic, "summaries": summaries, "search_results": search_results}):
             yield chunk
 
+    # 流式生成追问回答
     async def afollowup_stream(self, topic: str, question: str, search_results: str, existing_report: str = ""):
         async for chunk in self.followup_chain.astream({
             "topic": topic, "question": question, "search_results": search_results, "existing_report": existing_report,

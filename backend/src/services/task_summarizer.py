@@ -7,9 +7,11 @@ from langchain_openai import ChatOpenAI
 from backend.src.services.utils import extract_json_block, parse_json
 
 
+# 任务总结器：对搜索结果进行深度总结、评估信息缺口、评估 URL 价值
 class TaskSummarizer:
     def __init__(self, llm: ChatOpenAI):
         self.llm = llm
+        # 总结 prompt：将搜索结果组织成结构化 Markdown 总结
         self.prompt = ChatPromptTemplate.from_messages([
             (
                 "system",
@@ -38,6 +40,7 @@ class TaskSummarizer:
         ])
         self.chain = self.prompt | self.llm | StrOutputParser()
 
+        # 信息缺口评估 prompt（深度模式用）：判断当前总结是否充分
         self.gap_prompt = ChatPromptTemplate.from_messages([
             (
                 "system",
@@ -69,6 +72,7 @@ class TaskSummarizer:
         ])
         self.gap_chain = self.gap_prompt | self.llm | StrOutputParser()
 
+        # URL 价值评估 prompt：判断哪些搜索结果值得提取全文
         self.url_eval_prompt = ChatPromptTemplate.from_messages([
             (
                 "system",
@@ -95,6 +99,7 @@ class TaskSummarizer:
         ])
         self.url_eval_chain = self.url_eval_prompt | self.llm | StrOutputParser()
 
+    # 对单个子任务执行深度总结
     async def asummarize(self, title: str, query: str, search_results: str) -> str:
         return await self.chain.ainvoke({
             "title": title,
@@ -102,6 +107,7 @@ class TaskSummarizer:
             "search_results": search_results,
         })
 
+    # 评估当前总结是否信息充分（深度模式用）
     async def aevaluate_gaps(self, title: str, query: str, summary: str, iteration: int) -> dict:
         response = await self.gap_chain.ainvoke({
             "title": title,
@@ -112,6 +118,7 @@ class TaskSummarizer:
         raw = extract_json_block(response)
         return parse_json(raw)
 
+    # 评估哪些搜索结果 URL 值得提取全文内容
     async def aevaluate_urls(self, title: str, search_results: str) -> list[str]:
         response = await self.url_eval_chain.ainvoke({
             "title": title,
@@ -120,4 +127,5 @@ class TaskSummarizer:
         raw = extract_json_block(response)
         data = parse_json(raw)
         urls = data.get("urls", [])
+        # 最多返回前 2 个有效 URL
         return [item["url"] for item in urls if "url" in item][:2]
